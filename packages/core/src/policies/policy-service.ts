@@ -48,7 +48,7 @@ export class PolicyService {
     if (problem) throw new PlatformError('AUTHORIZATION_ERROR', problem);
 
     const orchestratorKey = req.orchestratorKey || null;
-    return this.prisma.$transaction(async (tx) => {
+    const policy = await this.prisma.$transaction(async (tx) => {
       const prev = await tx.approvalPolicy.findMany({ where: { scope: req.scope, projectId, orchestratorKey, operationType: req.operationType } });
       const version = prev.reduce((m, p) => Math.max(m, p.version), 0) + 1;
       await tx.approvalPolicy.updateMany({ where: { scope: req.scope, projectId, orchestratorKey, operationType: req.operationType, status: 'ACTIVE' }, data: { status: 'INACTIVE' } });
@@ -80,5 +80,8 @@ export class PolicyService {
       );
       return created;
     });
+    // Después de confirmar: catalog/policies.yaml refleja las políticas activas.
+    await this.core.configFiles.exportAfterChange(actor);
+    return policy;
   }
 }

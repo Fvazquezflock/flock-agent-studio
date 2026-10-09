@@ -1,6 +1,20 @@
 # Agentes, skills y tareas
 
-Las definiciones viven en PostgreSQL (versionadas). La carga inicial está en `packages/core/src/seed/`. Se editan desde la UI (*Agentes*, *Skills*) o la API; activar una versión siempre requiere aprobación.
+Las definiciones viven como archivos versionados con git en `catalog/agents/` y `catalog/skills/` (fuente de verdad), y la base guarda una copia de cada versión. Se editan en el archivo o desde la UI (*Agentes*, *Skills*) o la API; activar una versión siempre requiere aprobación. Ver *Dónde viven y cómo se editan*.
+
+## Dónde viven y cómo se editan (2026-10-09) — Implementado
+
+| Tipo | Archivo | Cuerpo del archivo |
+| --- | --- | --- |
+| Agente | `catalog/agents/<Clave>.md` (p. ej. `catalog/agents/QAValidator.md`) | Prompt de sistema (`systemPrompt`) |
+| Skill | `catalog/skills/<Clave>/SKILL.md` (estilo Claude Code) | Instrucciones (`instructions`) |
+
+- **Formato**: frontmatter YAML entre dos líneas `---` con el resto de la definición (nombre, descripción, objetivo, responsabilidades, skills, tareas, restricciones, límites, etiquetas; en las skills, reglas, `appliesTo`, etc.) y, debajo, el cuerpo en Markdown. El nombre del archivo (o de la carpeta de la skill) es la clave. El cuerpo no puede repetirse en el frontmatter. Los valores vacíos que coinciden con el valor por defecto se omiten.
+- **Editar el archivo** (o traerlo con `git pull`): al sincronizar (arranque de la API, `pnpm mao files sync`, *Configuración → Archivos → Sincronizar* o `pnpm catalog:sync`) se valida y se importa como **versión nueva pendiente de aprobación** con su solicitud de activación (`AP-n`). La versión activa no cambia hasta aprobarla; si se rechaza, el archivo vuelve a la versión activa (lo editado se recupera desde git). Un archivo inválido (formato, esquema o referencias, p. ej. una skill que no existe) queda *Inválido* y no se importa.
+- **Agente o skill nuevo**: crear el archivo con una clave nueva → la sincronización crea la entidad con v1 pendiente de aprobación (nunca activa). Si se rechaza, el archivo se borra.
+- **Desde la UI o la API**: el flujo de siempre (borrador → *Solicitar activación* → aprobar); al aprobar, la plataforma escribe el archivo. El detalle de cada agente o skill muestra la ruta de su archivo.
+- **Desactivar** (UI o API) borra el archivo. Borrar el archivo, en cambio, no desactiva nada: se vuelve a escribir desde la base.
+- Los borradores y las versiones viejas solo están en la base (historial, diff y *Restaurar*).
 
 ## Agentes iniciales
 
@@ -57,4 +71,4 @@ Campos de los contratos (`packages/shared/src/tasks.ts`) que alimentan la acció
 
 ## Exportación a Claude Code
 
-*Configuración → Ajustes generales → Exportar* genera `exports/claude-code/.claude/agents/*.md` y `.claude/skills/*/SKILL.md` **solo desde versiones activas**. Los archivos llevan el checksum de origen y no son fuente de verdad.
+*Configuración → Ajustes generales → Exportar* genera `exports/claude-code/.claude/agents/*.md` y `.claude/skills/*/SKILL.md` **solo desde versiones activas**. Los archivos llevan el checksum de origen y no son fuente de verdad: son una exportación para usar los agentes en Claude Code. La fuente de verdad es `catalog/` (ver *Dónde viven y cómo se editan*).

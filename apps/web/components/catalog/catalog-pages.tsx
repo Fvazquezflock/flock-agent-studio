@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { approvalLabel, fmtDateTime, TASK_TYPES, TASK_CONTRACTS } from '@mao/shared';
@@ -10,7 +11,7 @@ import { DiffView, FlowGraph, JsonView } from '@/components/ui/data';
 import { Alert, EmptyState, Tag, useToast } from '@/components/ui/feedback';
 import { FormField, Select, TextInput } from '@/components/ui/forms';
 import { api, errorText, useApi } from '@/lib/api';
-import { KIND_LABEL } from '@/lib/labels';
+import { KIND_LABEL, catalogFilePath } from '@/lib/labels';
 import { AgentForm, JsonField, OrchestratorForm, SkillForm } from './forms';
 
 export type Kind = 'agent' | 'skill' | 'orchestrator';
@@ -33,7 +34,7 @@ const TEMPLATES: Record<Kind, Record<string, unknown>> = {
 const DESCRIPTIONS: Record<Kind, string> = {
   agent: 'Agentes y subagentes versionados. Cada ejecución fija la versión exacta usada; activar una versión requiere aprobación.',
   skill: 'Instrucciones, reglas, plantillas y ejemplos reutilizables. Se cargan solo para las tareas donde aplican.',
-  orchestrator: 'Flujos declarativos (grafos acíclicos) guardados en la base de datos. Las etapas sin dependencias entre sí corren en paralelo.',
+  orchestrator: 'Flujos declarativos (grafos acíclicos) versionados en archivos del repo y en la base de datos. Las etapas sin dependencias entre sí corren en paralelo.',
 };
 
 export function CatalogList({ kind }: { kind: Kind }) {
@@ -231,6 +232,11 @@ export function CatalogDetail({ kind, entityKey }: { kind: Kind; entityKey: stri
         description={
           <>
             <span className="fk-mono">{entity.key}</span> · {entity.activeVersion ? `versión activa v${entity.activeVersion.version}` : 'sin versión activa'} · {entity.description}
+            <br />
+            Archivo{' '}
+            <Link className="fk-link fk-mono" href="/files" title="Estado de los archivos del catálogo">
+              {catalogFilePath(kind, entity.key)}
+            </Link>
           </>
         }
         breadcrumbs={[{ label: 'Inicio', href: '/' }, { label: 'Configuración' }, { label: meta.plural, href: `/${meta.path}` }, { label: entity.key }]}

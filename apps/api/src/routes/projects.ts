@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { backlogQuery, projectCreateRequest, projectUpdateRequest, projectConfigSchema } from '@mao/shared';
-import { PlatformError, contentHash, type Core } from '@mao/core';
+import { backlogQuery, projectCreateRequest, projectUpdateRequest } from '@mao/shared';
+import { PlatformError, type Core } from '@mao/core';
 import { actorOf, params, parse } from '../http';
 
 export function registerProjectRoutes(app: FastifyInstance, core: Core) {
@@ -16,22 +16,7 @@ export function registerProjectRoutes(app: FastifyInstance, core: Core) {
 
   app.post('/api/projects', async (req, reply) => {
     const body = parse(projectCreateRequest, req.body);
-    const actor = actorOf(core, req);
-    if (await prisma.project.findUnique({ where: { key: body.key } })) throw new PlatformError('VERSION_CONFLICT', `Ya existe el proyecto ${body.key}`);
-    const connection = body.connectionKey ? await prisma.connection.findUnique({ where: { key: body.connectionKey } }) : null;
-    if (body.mode === 'JIRA' && !connection) throw new PlatformError('VALIDATION_ERROR', 'Un proyecto en modo JIRA requiere una conexión');
-    const provider = body.providerKey ? await prisma.modelProviderConfiguration.findUnique({ where: { key: body.providerKey } }) : null;
-    const { config: global } = await core.config.getGlobal();
-    const config = projectConfigSchema.parse(global.defaults ?? {});
-    const project = await prisma.$transaction(async (tx) => {
-      const p = await tx.project.create({
-        data: { key: body.key, name: body.name, description: body.description, jiraProjectKey: body.jiraProjectKey, mode: body.mode, connectionId: connection?.id, defaultProviderId: provider?.id },
-      });
-      await tx.projectConfiguration.create({ data: { projectId: p.id, version: 1, status: 'ACTIVE', config: config as object, checksum: contentHash(config), changeNote: 'Configuración inicial heredada de la global', createdBy: actor.id } });
-      await core.audit.record({ actor, action: 'PROJECT_CREATED', entityType: 'Project', entityId: p.key, projectId: p.id, summary: `Proyecto ${p.key} creado (${p.mode})` }, tx);
-      return p;
-    });
-    return reply.code(201).send(project);
+    return reply.code(201).send(await core.config.createProject(body, actorOf(core, req)));
   });
 
   app.get('/api/projects/:key', async (req) => {
@@ -48,19 +33,11 @@ export function registerProjectRoutes(app: FastifyInstance, core: Core) {
 
   app.patch('/api/projects/:key', async (req) => {
     const { key } = params(req);
-    const body = parse(projectUpdateRequest, req.body);
-    const actor = actorOf(core, req);
-    const project = await prisma.project.findUnique({ where: { key } });
-    if (!project) throw new PlatformError('NOT_FOUND', `Proyecto ${key} no encontrado`);
-    const connection = body.connectionKey ? await prisma.connection.findUnique({ where: { key: body.connectionKey } }) : undefined;
-    const provider = body.providerKey ? await prisma.modelProviderConfiguration.findUnique({ where: { key: body.providerKey } }) : undefined;
-    if ((body.mode ?? project.mode) === 'JIRA' && !(connection ?? project.connectionId)) throw new PlatformError('VALIDATION_ERROR', 'Un proyecto en modo JIRA requiere una conexión');
-    const updated = await prisma.project.update({
-      where: { key },
-      data: { name: body.name, description: body.description, jiraProjectKey: body.jiraProjectKey, mode: body.mode, status: body.status, connectionId: connection?.id, defaultProviderId: provider?.id },
-    });
-    await core.audit.record({ actor, action: 'PROJECT_UPDATED', entityType: 'Project', entityId: key, projectId: project.id, summary: `Proyecto ${key} actualizado`, data: body });
-    return updated;
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    // El esquema parcial completa valores por defecto (mode DEMO, description ''): solo se cambian las claves enviadas.
+    const parsed = parse(projectUpdateRequest, raw);
+    const body = Object.fromEntries(Object.entries(parsed).filter(([k]) => raw[k] !== undefined)) as typeof parsed;
+    return core.config.updateProject(key, body, actorOf(core, req));
   });
 
   app.put('/api/projects/:key/config', async (req) => {

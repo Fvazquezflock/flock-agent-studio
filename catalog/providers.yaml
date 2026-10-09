@@ -1,0 +1,22 @@
+# Proveedores de IA, sin claves: solo el nombre de la variable de entorno (apiKeyEnv).
+# La plataforma exporta este archivo desde la base en cada cambio (sin secretos).
+# Los cambios manuales o traídos con git pull no se aplican solos: aplicalos con `pnpm mao files apply` o desde la UI (página Archivos).
+providers:
+  - key: anthropic-api
+    name: API de Anthropic
+    kind: ANTHROPIC_API
+    enabled: true
+    isDefault: false
+    config:
+      model: claude-opus-5-5
+      effort: medium
+      apiKeyEnv: ANTHROPIC_API_KEY
+  - key: claude-local
+    name: Claude Code local (claude -p)
+    kind: LOCAL_CLAUDE
+    enabled: true
+    isDefault: true
+    config:
+      bin: claude
+      model: default
+      effort: medium

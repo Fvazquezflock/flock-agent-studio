@@ -1,0 +1,271 @@
+# Proyecto SCRUM: metadatos y configuración activa.
+# La plataforma exporta este archivo desde la base en cada cambio (sin secretos).
+# Los cambios manuales o traídos con git pull no se aplican solos: aplicalos con `pnpm mao files apply` o desde la UI (página Archivos).
+name: Team Astro (Jira real)
+description: ""
+jiraProjectKey: SCRUM
+mode: JIRA
+status: ACTIVE
+connection: jira-mcp
+provider: claude-local
+config:
+  language: es-AR
+  jira:
+    issueTypes:
+      epic: Epic
+      story: Historia
+      task: Tarea
+      subtask: Subtask
+    taskHierarchy: subtask
+    storyEpicLink: parent
+    linkTypes:
+      blocks: Blocks
+      relates: Relates
+    requiredFields: []
+    customFields: []
+    statuses: []
+    transitions: []
+    correlationLabel: true
+    discovered:
+      at: 2026-10-09T16:42:59.944Z
+      issueTypes:
+        - id: "10001"
+          name: Epic
+          subtask: false
+        - id: "10002"
+          name: Subtask
+          subtask: true
+        - id: "10003"
+          name: Feature
+          subtask: false
+        - id: "10004"
+          name: Tarea
+          subtask: false
+        - id: "10006"
+          name: Historia
+          subtask: false
+        - id: "10007"
+          name: Error
+          subtask: false
+        - id: "10008"
+          name: Tarea
+          subtask: false
+      fields:
+        - id: statuscategorychangedate
+          name: Categoría de estado cambiada
+          custom: false
+        - id: issuetype
+          name: Tipo de Incidencia
+          custom: false
+        - id: timespent
+          name: Tiempo Trabajado
+          custom: false
+        - id: project
+          name: Proyecto
+          custom: false
+        - id: fixVersions
+          name: Versiones corregidas
+          custom: false
+        - id: aggregatetimespent
+          name: Σ Tiempo empleado
+          custom: false
+        - id: statusCategory
+          name: Categoría de estado
+          custom: false
+        - id: parent
+          name: Principal
+          custom: false
+        - id: customfield_10035
+          name: Diseño
+          custom: true
+        - id: resolution
+          name: Resolución
+          custom: false
+        - id: customfield_10036
+          name: Vulnerabilidad
+          custom: true
+        - id: resolutiondate
+          name: Resuelta
+          custom: false
+        - id: workratio
+          name: Relación de trabajo
+          custom: false
+        - id: lastViewed
+          name: Vista por Última Vez
+          custom: false
+        - id: watches
+          name: Interesados
+          custom: false
+        - id: issuerestriction
+          name: Restringir a
+          custom: false
+        - id: thumbnail
+          name: Imágenes
+          custom: false
+        - id: created
+          name: Creada
+          custom: false
+        - id: customfield_10020
+          name: Sprint
+          custom: true
+        - id: customfield_10021
+          name: Flagged
+          custom: true
+        - id: priority
+          name: Prioridad
+          custom: false
+        - id: customfield_10026
+          name: Sesiones de agentes
+          custom: true
+        - id: labels
+          name: Etiquetas
+          custom: false
+        - id: customfield_10016
+          name: Story point estimate
+          custom: true
+        - id: customfield_10017
+          name: Color de la incidencia
+          custom: true
+        - id: customfield_10019
+          name: Clasificación
+          custom: true
+        - id: timeestimate
+          name: Trabajo restante estimado
+          custom: false
+        - id: aggregatetimeoriginalestimate
+          name: Σ Estimación original
+          custom: false
+        - id: versions
+          name: Versiones afectadas
+          custom: false
+        - id: issuelinks
+          name: Incidencias Enlazadas
+          custom: false
+        - id: assignee
+          name: Persona asignada
+          custom: false
+        - id: updated
+          name: Actualizada
+          custom: false
+        - id: status
+          name: Estado
+          custom: false
+        - id: components
+          name: Componentes
+          custom: false
+        - id: issuekey
+          name: Clave
+          custom: false
+        - id: timeoriginalestimate
+          name: Estimación original
+          custom: false
+        - id: description
+          name: Descripción
+          custom: false
+        - id: timetracking
+          name: Seguimiento de tiempo
+          custom: false
+        - id: customfield_10015
+          name: Fecha de inicio
+          custom: true
+        - id: security
+          name: Nivel de Seguridad
+          custom: false
+        - id: attachment
+          name: Adjunto
+          custom: false
+        - id: aggregatetimeestimate
+          name: Σ Trabajo restante estimado
+          custom: false
+        - id: summary
+          name: Resumen
+          custom: false
+        - id: creator
+          name: Creador
+          custom: false
+        - id: subtasks
+          name: Subtareas
+          custom: false
+        - id: customfield_10041
+          name: Vulnerabilidad
+          custom: true
+        - id: reporter
+          name: Informador
+          custom: false
+        - id: aggregateprogress
+          name: Σ Progreso
+          custom: false
+        - id: customfield_10000
+          name: development
+          custom: true
+        - id: customfield_10001
+          name: Team
+          custom: true
+        - id: environment
+          name: Entorno
+          custom: false
+        - id: duedate
+          name: Fecha de vencimiento
+          custom: false
+        - id: progress
+          name: Progreso
+          custom: false
+        - id: votes
+          name: Votos
+          custom: false
+        - id: comment
+          name: Comentario
+          custom: false
+        - id: worklog
+          name: Registrar Horas de Trabajo
+          custom: false
+      transitions: []
+  templates:
+    storyTitle: "{{actor}} — {{capacidad}}"
+    storyDescription: |-
+      ## Objetivo
+      {{objective}}
+
+      ## Comportamiento esperado
+      {{expectedBehavior}}
+
+      ## Criterios de aceptación
+      {{acceptanceCriteria}}
+
+      ## Reglas de negocio
+      {{businessRules}}
+
+      ## Supuestos y dudas
+      {{assumptions}}
+    acceptanceCriteriaFormat: gherkin
+    minAcceptanceCriteria: 2
+    taskTitlePrefix:
+      BACKEND: "[BE]"
+      FRONTEND: "[FE]"
+      FULLSTACK: "[FS]"
+      QA: "[QA]"
+  storyPoints:
+    enabled: false
+    scale:
+      - 1
+      - 2
+      - 3
+      - 5
+      - 8
+      - 13
+  definitionOfReady: []
+  definitionOfDone: []
+  technologies: []
+  specialties:
+    - BACKEND
+    - FRONTEND
+    - FULLSTACK
+    - QA
+  rules: []
+  enabledAgents: []
+  enabledSkills: []
+  enabledOrchestrators: []
+  projectSkills:
+    - RegulatoryComplianceAR
+    - AccessibilityWCAG
+    - IntegrationResiliencePatterns

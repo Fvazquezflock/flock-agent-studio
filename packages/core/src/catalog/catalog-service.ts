@@ -231,18 +231,23 @@ export class CatalogService {
     // Revalidación con el catálogo actual (las referencias pueden haber cambiado).
     await this.assertValid(kind, v.definition, key);
     await this.db()[m.version].update({ where: { id: v.id }, data: { status: 'PENDING_APPROVAL' } });
-    const request = await this.core.approvals.createActivationRequest({
-      kind,
-      operationType: m.activationOp,
-      key,
-      versionId: v.id,
-      versionNumber,
-      checksum: v.checksum,
-      definition: v.definition,
-      previousActive: v.entity.activeVersion ? { version: v.entity.activeVersion.version, definition: v.entity.activeVersion.definition } : null,
-      actor,
-    });
-    return request;
+    try {
+      return await this.core.approvals.createActivationRequest({
+        kind,
+        operationType: m.activationOp,
+        key,
+        versionId: v.id,
+        versionNumber,
+        checksum: v.checksum,
+        definition: v.definition,
+        previousActive: v.entity.activeVersion ? { version: v.entity.activeVersion.version, definition: v.entity.activeVersion.definition } : null,
+        actor,
+      });
+    } catch (err) {
+      // Sin solicitud (p. ej. política DENIED) la versión no puede quedar esperando una aprobación que no existe.
+      await this.db()[m.version].update({ where: { id: v.id }, data: { status: v.status } });
+      throw err;
+    }
   }
 
   /** Aplicada por el motor de aprobaciones cuando la activación fue aprobada. */
@@ -286,7 +291,11 @@ export class CatalogService {
       await this.core.audit.record({ actor, action: `${kind.toUpperCase()}_DEACTIVATED`, entityType: m.label, entityId: key, summary: `${m.label} ${key} desactivado` }, tx);
       return row;
     };
-    return txIn ? run(txIn) : this.core.deps.prisma.$transaction(run);
+    // Dentro de otra transacción (propuesta de cancelación) el archivo lo actualiza el hook de aprobaciones.
+    if (txIn) return run(txIn);
+    const row = await this.core.deps.prisma.$transaction(run);
+    await this.core.catalogSync.exportAfterChange(actor, [kind], [key]);
+    return row;
   }
 
   async archiveVersion(kind: CatalogKind, key: string, versionNumber: number, actor: Actor) {

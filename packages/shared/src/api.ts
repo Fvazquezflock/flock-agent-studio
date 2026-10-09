@@ -134,7 +134,14 @@ export const projectCreateRequest = z.object({
   providerKey: z.string().optional(),
 });
 
-export const projectUpdateRequest = projectCreateRequest.partial().omit({ key: true }).extend({
+// Sin valores por defecto: con .partial() Zod 4 igual aplica los default (un PATCH solo con name pasaba el proyecto a DEMO).
+export const projectUpdateRequest = z.object({
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().max(2000).optional(),
+  jiraProjectKey: z.string().min(1).max(20).optional(),
+  mode: z.enum(['DEMO', 'JIRA']).optional(),
+  connectionKey: z.string().optional(),
+  providerKey: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(),
 });
 
@@ -159,3 +166,23 @@ export const proposalDecisionRequest = z.object({
   comment: z.string().max(4000).default(''),
   channel: z.enum(['UI', 'CLI', 'CLAUDE_CODE', 'API']).default('API'),
 });
+
+/**
+ * Archivos de `catalog/` (fuente de verdad versionada). `sync` exporta lo que la base ya conoce e importa los cambios
+ * de los archivos como versiones pendientes de aprobación; `export` solo escribe desde la base. `overwrite` (solo con
+ * `export`) reemplaza también archivos con cambios sin importar: es para la migración inicial.
+ */
+export const catalogFilesSyncRequest = z
+  .object({
+    mode: z.enum(['sync', 'export']),
+    overwrite: z.boolean().optional(),
+  })
+  .refine((b) => !b.overwrite || b.mode === 'export', { message: 'overwrite solo se acepta con mode "export"', path: ['overwrite'] });
+export type CatalogFilesSyncRequest = z.infer<typeof catalogFilesSyncRequest>;
+
+/** Aplicar a la base archivos de configuración editados a mano: acción explícita del propietario. Sin `files`, todos los que tienen cambios. */
+export const catalogFilesApplyRequest = z.object({
+  files: z.array(z.string().min(1).max(300)).max(200).optional(),
+  confirm: z.literal(true, { error: 'Confirmá la aplicación con confirm: true' }),
+});
+export type CatalogFilesApplyRequest = z.infer<typeof catalogFilesApplyRequest>;

@@ -1,0 +1,197 @@
+# Orquestador del catálogo (flujo declarativo).
+# Editar este archivo crea una versión pendiente de aprobación al sincronizar: nunca se activa sola.
+name: HU existente → Validación → Tareas
+objective: Validar una historia existente, proponer mejoras con diferencias editables y generar las tareas técnicas que faltan.
+description: Recupera la historia y su contexto, diagnostica su calidad contra la Definition of Ready, propone mejoras, descompone en tareas evitando duplicados y hace una evaluación cruzada (cobertura QA y dependencias en paralelo) antes de la aprobación.
+useConditions:
+  - Hay una historia existente con descripción o criterios incompletos.
+  - Se quiere preparar una historia para el sprint.
+keywords:
+  - historia
+  - hu
+  - user story
+  - validá
+  - valida
+  - mejorá
+  - mejora
+  - revisá
+  - refinar
+  - definition of ready
+inputSchema:
+  fields:
+    - key: storyKey
+      label: Clave de la historia
+      type: issueKey
+      required: true
+      description: Por ejemplo DEMO-102
+    - key: objective
+      label: Objetivo adicional
+      type: text
+      required: false
+      description: Opcional
+steps:
+  - key: context
+    name: Recuperación
+    handler: jira.context
+    agentKey: JiraContextAnalyzer
+    params:
+      mode: story
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: review_story
+    name: Validación funcional
+    handler: agent.task
+    agentKey: FunctionalAnalyst
+    skillKeys:
+      - AcceptanceCriteriaQuality
+    task: story_review
+    dependsOn:
+      - context
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: improvements
+    name: Propuestas de mejora
+    handler: agent.task
+    agentKey: FunctionalAnalyst
+    task: story_improvements
+    dependsOn:
+      - review_story
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_backend
+    name: Tareas Backend
+    handler: agent.task
+    agentKey: BackendSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - improvements
+    params:
+      specialty: BACKEND
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_frontend
+    name: Tareas Frontend
+    handler: agent.task
+    agentKey: FrontendSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - improvements
+    params:
+      specialty: FRONTEND
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_fullstack
+    name: Tareas Fullstack
+    handler: agent.task
+    agentKey: FullstackSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - improvements
+    params:
+      specialty: FULLSTACK
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: qa_coverage
+    name: Cobertura QA
+    handler: agent.task
+    agentKey: QAValidator
+    task: qa_coverage
+    dependsOn:
+      - tasks_backend
+      - tasks_frontend
+      - tasks_fullstack
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: dependencies
+    name: Dependencias y orden
+    handler: agent.task
+    agentKey: DependencyPlanner
+    task: dependency_plan
+    dependsOn:
+      - tasks_backend
+      - tasks_frontend
+      - tasks_fullstack
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: review
+    name: Revisión del supervisor
+    handler: supervisor.review
+    agentKey: MainSupervisor
+    dependsOn:
+      - qa_coverage
+      - dependencies
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: continue
+    parallelSafe: true
+  - key: approval
+    name: Aprobación
+    handler: approval.gate
+    dependsOn:
+      - review
+    params:
+      builder: story_publication
+      regenerateFrom:
+        - improvements
+    retry:
+      maxAttempts: 1
+      backoffMs: 1000
+    onError: fail
+    parallelSafe: true
+  - key: publish
+    name: Publicación
+    handler: jira.publish
+    dependsOn:
+      - approval
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: false
+approvalConditions:
+  operationTypes:
+    - UPDATE_ISSUE
+    - CREATE_ISSUE
+    - CREATE_ISSUE_LINK
+  notes: Cambios en la HU, tareas nuevas y relaciones se aprueban por separado. Antes de actualizar se compara la versión actual de Jira.
+errorHandling:
+  defaultMaxAttempts: 3
+  backoffMs: 2000
+  notes: Un conflicto de versión detiene la escritura de esa issue y genera una nueva revisión.
+resultSchema:
+  description: Diagnóstico, mejoras, tareas faltantes y resultado de publicación.
+  fields:
+    - key: diagnosis
+      description: Diagnóstico y preparación de la HU
+    - key: improvements
+      description: Cantidad de cambios propuestos
+    - key: publication
+      description: Operaciones ejecutadas o simuladas
+tags:
+  - jira
+  - refinamiento

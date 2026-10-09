@@ -1,30 +1,27 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import {
-  OPERATION_TYPES,
-  agentDefinitionSchema,
-  globalConfigSchema,
-  orchestratorDefinitionSchema,
-  projectConfigSchema,
-  skillDefinitionSchema,
-  type ApprovalMode,
-} from '@mao/shared';
+import { OPERATION_TYPES, globalConfigSchema, projectConfigSchema, type ApprovalMode, type OrchestratorDefinition } from '@mao/shared';
+import type { Prisma } from '@mao/db';
+import type { Actor } from '../context';
 import type { Core } from '../core';
+import { KIND_META } from '../catalog/catalog-service';
+import { CATALOG_KINDS } from '../catalog/file-format';
+import type { LoadedCatalogFile } from '../catalog/file-store';
+import { CATALOG_STATE_LABEL, FILE_SYNC_ACTOR, summarizeCatalogReports } from '../catalog/sync-service';
+import { validateDefinition, type CatalogIndex } from '../catalog/validation';
 import { DEFAULT_MODES } from '../policies/policy-engine';
 import { contentHash } from '../util/hash';
 import { DemoJiraGateway } from '../jira/demo-gateway';
-import { AGENT_SEEDS } from './agents';
-import { ORCHESTRATOR_SEEDS } from './orchestrators';
-import { SKILL_SEEDS } from './skills';
 
 const SEED_ACTOR = 'instalación inicial';
 const MANDATORY_OPS = ['DELETE_EXTERNAL', 'ACTIVATE_SKILL', 'ACTIVATE_ORCHESTRATOR'];
 
 /**
  * Carga inicial idempotente: crea lo que falta y nunca pisa cambios del usuario.
- * Las versiones iniciales quedan ACTIVE porque las instala el propietario al configurar la plataforma (queda auditado).
- */
-/**
+ * - Configuración: primero desde los archivos de `catalog/` (ConfigFileService) y después los valores por defecto que falten.
+ * - Catálogo: en una instalación nueva (sin agentes, skills ni orquestadores) instala todos los archivos de `catalog/`
+ *   como v1 ACTIVE, porque los instala el propietario al configurar la plataforma (queda auditado). Con catálogo en la
+ *   base solo informa el estado de los archivos (la sincronización importa lo nuevo como pendiente de aprobación).
  * Con `demo` (o MAO_SEED_DEMO=true) también crea el proveedor simulado y el proyecto DEMO con datos ficticios (pruebas).
  * Sin demo, el proveedor por defecto es Claude Code local y solo se trabaja contra el Jira registrado.
  */
@@ -32,6 +29,9 @@ export async function seedDatabase(core: Core, log: (m: string) => void = () => 
   const demo = opts.demo ?? process.env.MAO_SEED_DEMO === 'true';
   const prisma = core.deps.prisma;
   const actor = { type: 'SYSTEM' as const, id: SEED_ACTOR };
+
+  // ---- Configuración desde catalog/ (global, políticas, proveedores, conexiones, proyectos) ----
+  await core.configFiles.seedFromFiles(log);
 
   // ---- Configuración global ----
   if (!(await prisma.globalSetting.findUnique({ where: { key: 'global.config' } }))) {
@@ -92,67 +92,18 @@ export async function seedDatabase(core: Core, log: (m: string) => void = () => 
     log('Conexión jira-mcp registrada (escritura deshabilitada)');
   }
 
-  // ---- Skills ----
-  for (const s of SKILL_SEEDS) {
-    if (await prisma.skill.findUnique({ where: { key: s.key } })) continue;
-    const { key, ...rest } = s;
-    const def = skillDefinitionSchema.parse(rest);
-    await prisma.$transaction(async (tx) => {
-      const skill = await tx.skill.create({ data: { key, name: def.name, description: def.description, status: 'ACTIVE', createdBy: SEED_ACTOR } });
-      const v = await tx.skillVersion.create({
-        data: { skillId: skill.id, version: 1, status: 'ACTIVE', definition: def as object, checksum: contentHash(def), changeNote: 'Versión inicial', createdBy: SEED_ACTOR, approvedBy: SEED_ACTOR, approvedAt: new Date(), activatedAt: new Date() },
-      });
-      await tx.skill.update({ where: { id: skill.id }, data: { activeVersionId: v.id } });
-      await core.audit.record({ actor, action: 'SEED_SKILL', entityType: 'Skill', entityId: key, summary: `Skill ${key} v1 instalada` }, tx);
-    });
-    log(`Skill ${s.key}`);
-  }
-
-  // ---- Agentes ----
-  for (const a of AGENT_SEEDS) {
-    if (await prisma.agent.findUnique({ where: { key: a.key } })) continue;
-    const { key, ...rest } = a;
-    const def = agentDefinitionSchema.parse(rest);
-    await prisma.$transaction(async (tx) => {
-      const agent = await tx.agent.create({ data: { key, name: def.name, description: def.description, status: 'ACTIVE', createdBy: SEED_ACTOR } });
-      const v = await tx.agentVersion.create({
-        data: { agentId: agent.id, version: 1, status: 'ACTIVE', definition: def as object, checksum: contentHash(def), changeNote: 'Versión inicial', createdBy: SEED_ACTOR, approvedBy: SEED_ACTOR, approvedAt: new Date(), activatedAt: new Date() },
-      });
-      await tx.agent.update({ where: { id: agent.id }, data: { activeVersionId: v.id } });
-      await core.audit.record({ actor, action: 'SEED_AGENT', entityType: 'Agente', entityId: key, summary: `Agente ${key} v1 instalado` }, tx);
-    });
-    log(`Agente ${a.key}`);
-  }
-
-  // ---- Orquestadores ----
-  for (const o of ORCHESTRATOR_SEEDS) {
-    if (await prisma.orchestrator.findUnique({ where: { key: o.key } })) continue;
-    const def = orchestratorDefinitionSchema.parse(o.definition);
-    const check = await core.catalog.validate('orchestrator', def);
-    if (!check.valid) throw new Error(`Orquestador ${o.key} inválido: ${check.errors.join('; ')}`);
-    await prisma.$transaction(async (tx) => {
-      const orch = await tx.orchestrator.create({ data: { key: o.key, name: def.name, description: def.description, status: 'ACTIVE', createdBy: SEED_ACTOR } });
-      const v = await tx.orchestratorVersion.create({
-        data: {
-          orchestratorId: orch.id,
-          version: 1,
-          status: 'ACTIVE',
-          definition: def as object,
-          checksum: contentHash(def),
-          changeNote: 'Versión inicial',
-          createdBy: SEED_ACTOR,
-          approvedBy: SEED_ACTOR,
-          approvedAt: new Date(),
-          activatedAt: new Date(),
-          steps: {
-            create: def.steps.map((s, i) => ({ key: s.key, name: s.name, handler: s.handler, agentKey: s.agentKey, skillKeys: s.skillKeys, dependsOn: [...new Set([...s.dependsOn, ...s.inputs])], position: i, config: { task: s.task, params: s.params, retry: s.retry, onError: s.onError } as object })),
-          },
-        },
-      });
-      await tx.orchestrator.update({ where: { id: orch.id }, data: { activeVersionId: v.id } });
-      await core.audit.record({ actor, action: 'SEED_ORCHESTRATOR', entityType: 'Orquestador', entityId: o.key, summary: `Orquestador ${o.key} v1 instalado` }, tx);
-    });
-    log(`Orquestador ${o.key}`);
+  // ---- Catálogo (skills, agentes, orquestadores) desde catalog/ ----
+  const counts = await Promise.all([prisma.skill.count(), prisma.agent.count(), prisma.orchestrator.count()]);
+  if (counts.every((n) => n === 0)) {
+    await installCatalog(core, actor, log);
+  } else {
+    // Base con catálogo: el seed solo informa. Importar (como versiones pendientes de aprobación) lo hacen el arranque de
+    // la API, `pnpm mao files sync` o `pnpm catalog:sync`.
+    const reports = await core.catalogSync.reconcile(FILE_SYNC_ACTOR, { mode: 'status' });
+    log(`Catálogo frente a ${core.catalogFiles.dir}: ${summarizeCatalogReports(reports)}`);
+    for (const r of reports.filter((x) => x.state !== 'IN_SYNC' && x.state !== 'INACTIVE')) {
+      log(`  ${KIND_META[r.kind].label} ${r.key}: ${CATALOG_STATE_LABEL[r.state]}${r.message ? ` — ${r.message}` : ''}${r.errors?.length ? ` (${r.errors.join('; ')})` : ''}`);
+    }
   }
 
   // ---- Proyecto demo ----
@@ -182,4 +133,83 @@ export async function seedDatabase(core: Core, log: (m: string) => void = () => 
     });
     log('Proyecto DEMO');
   }
+}
+
+type ValidFile = Extract<LoadedCatalogFile, { ok: true }>;
+
+/**
+ * Instalación nueva: todos los archivos de `catalog/` como v1 ACTIVE, en una sola transacción. Antes de crear nada valida
+ * todos los archivos (esquema y referencias entre ellos): un archivo inválido corta la instalación con un error claro.
+ */
+async function installCatalog(core: Core, actor: Actor, log: (m: string) => void) {
+  const store = core.catalogFiles;
+  const files = CATALOG_KINDS.flatMap((kind) => store.list(kind).map((e) => store.load(kind, e.key)).filter((f): f is LoadedCatalogFile => f !== null));
+  const errors = files.flatMap((f) => (f.ok ? [] : f.errors.map((e) => `${f.entry.relPath}: ${e}`)));
+  const valid = files.filter((f): f is ValidFile => f.ok);
+  const index: CatalogIndex = {
+    agents: new Map(valid.filter((f) => f.entry.kind === 'agent').map((f) => [f.entry.key, { tasks: (f.definition.tasks as string[] | undefined) ?? [], status: 'ACTIVE' }])),
+    skills: new Map(valid.filter((f) => f.entry.kind === 'skill').map((f) => [f.entry.key, { status: 'ACTIVE' }])),
+  };
+  for (const f of valid) {
+    const check = validateDefinition(f.entry.kind, f.definition, index, f.entry.key);
+    errors.push(...check.errors.map((e) => `${f.entry.relPath}: ${e}`));
+  }
+  if (errors.length) {
+    throw new Error(`Instalación inicial cancelada: hay archivos inválidos en ${store.dir} (no se creó nada). Corregilos y volvé a correr la carga inicial:\n- ${errors.join('\n- ')}`);
+  }
+  if (!valid.length) {
+    log(`Advertencia: ${store.dir} no tiene agentes, skills ni orquestadores; el catálogo queda vacío`);
+    return;
+  }
+
+  await core.deps.prisma.$transaction(async (tx) => {
+    for (const f of valid) await installFile(core, f, actor, tx);
+  });
+  for (const f of valid) log(`${KIND_META[f.entry.kind].label} ${f.entry.key} (${f.entry.relPath})`);
+}
+
+type Delegate = { create: (args: unknown) => Promise<{ id: string }>; update: (args: unknown) => Promise<unknown> };
+
+async function installFile(core: Core, f: ValidFile, actor: Actor, tx: Prisma.TransactionClient) {
+  const { kind, key, relPath } = f.entry;
+  const m = KIND_META[kind];
+  const db = tx as unknown as Record<string, Delegate>;
+  const def = f.definition as { name: string; description?: string };
+  const now = new Date();
+  // Los pasos del orquestador se materializan (consultas del motor y de la UI).
+  const steps =
+    kind === 'orchestrator'
+      ? {
+          steps: {
+            create: (f.definition as OrchestratorDefinition).steps.map((s, i) => ({
+              key: s.key,
+              name: s.name,
+              handler: s.handler,
+              agentKey: s.agentKey,
+              skillKeys: s.skillKeys,
+              dependsOn: [...new Set([...s.dependsOn, ...s.inputs])],
+              position: i,
+              config: { task: s.task, params: s.params, retry: s.retry, onError: s.onError } as object,
+            })),
+          },
+        }
+      : {};
+  const entity = await db[m.entity].create({ data: { key, name: def.name, description: def.description ?? '', status: 'ACTIVE', createdBy: SEED_ACTOR } });
+  const version = await db[m.version].create({
+    data: {
+      [m.fk]: entity.id,
+      version: 1,
+      status: 'ACTIVE',
+      definition: def as object,
+      checksum: contentHash(def),
+      changeNote: `Versión inicial (catalog/${relPath})`,
+      createdBy: SEED_ACTOR,
+      approvedBy: SEED_ACTOR,
+      approvedAt: now,
+      activatedAt: now,
+      ...steps,
+    },
+  });
+  await db[m.entity].update({ where: { id: entity.id }, data: { activeVersionId: version.id } });
+  await core.audit.record({ actor, action: `SEED_${kind.toUpperCase()}`, entityType: m.label, entityId: key, summary: `${m.label} ${key}: v1 instalada desde catalog/${relPath}` }, tx);
 }

@@ -1,0 +1,77 @@
+# Configuración global de la plataforma (límites, seguridad y valores por defecto de los proyectos).
+# La plataforma exporta este archivo desde la base en cada cambio (sin secretos).
+# Los cambios manuales o traídos con git pull no se aplican solos: aplicalos con `pnpm mao files apply` o desde la UI (página Archivos).
+limits:
+  maxConcurrentExecutions: 2
+  maxStepAttempts: 3
+  defaultStepTimeoutMs: 180000
+  maxBudgetUsdPerExecution: 3
+security:
+  mandatory:
+    allowDeleteExternal: false
+    allowAgentWriteTools: false
+    requireApprovalForActivation: true
+defaults:
+  language: es-AR
+  jira:
+    issueTypes:
+      epic: Epic
+      story: Story
+      task: Task
+      subtask: Sub-task
+    taskHierarchy: subtask
+    storyEpicLink: parent
+    linkTypes:
+      blocks: Blocks
+      relates: Relates
+    requiredFields: []
+    customFields: []
+    statuses: []
+    transitions: []
+    correlationLabel: true
+  templates:
+    storyTitle: "{{actor}} — {{capacidad}}"
+    storyDescription: |-
+      ## Objetivo
+      {{objective}}
+
+      ## Comportamiento esperado
+      {{expectedBehavior}}
+
+      ## Criterios de aceptación
+      {{acceptanceCriteria}}
+
+      ## Reglas de negocio
+      {{businessRules}}
+
+      ## Supuestos y dudas
+      {{assumptions}}
+    acceptanceCriteriaFormat: gherkin
+    minAcceptanceCriteria: 2
+    taskTitlePrefix:
+      BACKEND: "[BE]"
+      FRONTEND: "[FE]"
+      FULLSTACK: "[FS]"
+      QA: "[QA]"
+  storyPoints:
+    enabled: false
+    scale:
+      - 1
+      - 2
+      - 3
+      - 5
+      - 8
+      - 13
+  definitionOfReady: []
+  definitionOfDone: []
+  technologies: []
+  specialties:
+    - BACKEND
+    - FRONTEND
+    - FULLSTACK
+    - QA
+  rules: []
+  enabledAgents: []
+  enabledSkills: []
+  enabledOrchestrators: []
+  projectSkills: []

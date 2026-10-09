@@ -164,6 +164,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       { label: 'Agentes', href: '/agents', icon: 'users' },
       { label: 'Orquestadores', href: '/orchestrators', icon: 'git-branch' },
       { label: 'Skills', href: '/skills', icon: 'layers' },
+      { label: 'Archivos', href: '/files', icon: 'file' },
       { label: 'Propuestas', href: '/proposals', icon: 'sparkles', count: c.proposals },
       { label: 'Auditoría', href: '/audit', icon: 'list' },
       { label: 'Consumo de IA', href: '/usage', icon: 'bar-chart' },

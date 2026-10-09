@@ -286,6 +286,17 @@ export class ApprovalService {
       await tx.approvalRequest.update({ where: { id: req.id }, data: { status: 'SUPERSEDED' } });
       await this.core.audit.record({ actor, action: 'APPROVAL_SUPERSEDED', entityType: 'ApprovalRequest', entityId: req.id, projectId: req.projectId, summary: `AP-${req.number} reemplazada: ${reason}` }, tx);
     });
+    await this.exportFilesAfter(req.kind, actor);
+  }
+
+  /**
+   * Después de confirmar (nunca dentro de la transacción): refleja en `catalog/` los cambios del catálogo y de la
+   * configuración (una propuesta aplicada puede cambiar la configuración de un proyecto). No lanza.
+   */
+  private async exportFilesAfter(kind: string, actor: Actor) {
+    if (kind !== 'activation' && kind !== 'capability_proposal') return;
+    await this.core.catalogSync.exportAfterChange(actor);
+    await this.core.configFiles.exportAfterChange(actor);
   }
 
   // ---------- Consulta ----------
@@ -429,7 +440,7 @@ export class ApprovalService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const decisionItems = [
         ...approve.map((i) => ({ itemKey: i.itemKey, revision: i.revision, payloadHash: i.payloadHash, decision: 'APPROVED', policyId: fresh.get(i.id)!.policyId, policyMode: fresh.get(i.id)!.mode, policyVersion: fresh.get(i.id)!.policyVersion })),
         ...reject.map((i) => ({ itemKey: i.itemKey, revision: i.revision, payloadHash: i.payloadHash, decision: 'REJECTED', policyId: i.policyId, policyMode: i.policyMode, policyVersion: i.policyVersion })),
@@ -472,6 +483,8 @@ export class ApprovalService {
       if (allDecided) await this.onRequestDecided(req.id, actor, tx);
       return { decision, status: allDecided ? 'DECIDED' : 'PARTIALLY_DECIDED' };
     });
+    await this.exportFilesAfter(req.kind, actor);
+    return result;
   }
 
   /** Efectos al cerrar una solicitud: activar versiones, aplicar propuestas o reanudar la ejecución. */
@@ -518,6 +531,7 @@ export class ApprovalService {
       await tx.approvalRequest.update({ where: { id: req.id }, data: { status: 'SUPERSEDED' } });
       await this.core.audit.record({ actor, action: 'APPROVAL_REGENERATE', entityType: 'ApprovalRequest', entityId: req.id, executionId: req.executionId, projectId: req.projectId, summary: `AP-${req.number} rechazada para regenerar: "${feedback}"` }, tx);
     });
+    await this.exportFilesAfter(req.kind, actor);
     await this.core.engine.resetForRegeneration(req.executionId, req.stepKey, feedback, actor);
     return { status: 'SUPERSEDED' };
   }

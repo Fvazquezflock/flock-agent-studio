@@ -1,7 +1,7 @@
 # PROGRESS — Multi-Agent Orchestration Studio
 
 Documento de traspaso. Si retomás el trabajo (otra persona, otra PC u otra sesión de Claude Code), empezá por acá.
-Última actualización: 2026-10-09 — MVP completo y verificado (fases 0 a 6). Base de trabajo en PostgreSQL de Railway, reiniciada para la demo. Datos demo opcionales (`MAO_SEED_DEMO`) e instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`).
+Última actualización: 2026-10-09 — MVP completo y verificado (fases 0 a 6). Base de trabajo en PostgreSQL de Railway, reiniciada para la demo. Datos demo opcionales (`MAO_SEED_DEMO`) e instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`). Definiciones y configuración como archivos en `catalog/` (fuente de verdad versionada con git; la base guarda copia de cada versión).
 
 ## Estado por fase
 
@@ -23,6 +23,23 @@ Documento de traspaso. Si retomás el trabajo (otra persona, otra PC u otra sesi
 | 13 — Acción y motivo; cancelar por transición | Implementado | Cada ítem de aprobación y cada propuesta indica Crear/Modificar/Cancelar y por qué (con evidencia e inconsistencias); cancelar una HU es una transición real en Jira (`TRANSITION_ISSUE`, siempre aprobación individual). `SCRUM` no tiene estado de cancelación; la CLI todavía no muestra acción ni motivo |
 | 14 — Instalador del servidor MCP de Jira | Implementado | `scripts/setup-mcp.ps1` instala `mcp-atlassian` fijado en `ec54351` y crea el `.env` desde una plantilla; verificado con una instalación nueva (63 herramientas) |
 | 15 — Datos demo opcionales y reinicio para demo | Implementado | El seed solo crea `DEMO` y el proveedor simulado con `MAO_SEED_DEMO=true`; base de Railway reiniciada (se conservan catálogo, `SCRUM`, políticas, conexión y proveedores reales); CP-1 a CP-4 aplicadas |
+| 16 — Definiciones y configuración en archivos (`catalog/`) | Implementado | Fuente de verdad versionada con git; importar un archivo nunca activa (queda pendiente de aprobación); la configuración editada a mano solo se aplica con `apply`; migración de la base de trabajo hecha; 162 pruebas. Detección en vivo: pendiente |
+
+## Definiciones y configuración como archivos en `catalog/` (opción B, 2026-10-09) — Implementado
+
+**Decisión**: los archivos de `catalog/` son la fuente de verdad versionada con git de agentes, skills, orquestadores y la configuración sin secretos; la base guarda copia de cada versión (las ejecuciones fijan versiones; auditoría, diff y *Restaurar*), los borradores y las propuestas no aprobadas. Regla central: un archivo editado a mano o traído con `git pull` **nunca se activa ni se aplica solo**. Detalle técnico en ARCHITECTURE.md → *Catálogo y configuración en archivos*; uso en README.md.
+
+- **Formato** (`packages/core/src/catalog/file-format.ts`, `file-store.ts`; configuración: `packages/core/src/config/config-format.ts`): `agents/<Clave>.md` y `skills/<Clave>/SKILL.md` (frontmatter YAML + prompt de sistema o instrucciones en el cuerpo, estilo Claude Code), `orchestrators/<CLAVE>.yaml`, `global.yaml`, `policies.yaml`, `connections.yaml` (solo `envFile` dentro de `MCP/`; sin `writeEnabled`, comando ni credenciales), `providers.yaml` (sin el simulado; solo `apiKeyEnv`), `projects/<CLAVE>.yaml` (metadatos + configuración activa; sin proyectos DEMO). Render sin pérdida y hash normalizado (Zod con valores por defecto, LF, sin BOM, orden estable). `.gitattributes` fuerza LF en `catalog/`. `MAO_CATALOG_DIR` cambia la carpeta. Dependencia nueva: `yaml` 2.9.1 en `@mao/core`.
+- **Definiciones** (`CatalogSyncService`, `core.catalogSync`, `packages/core/src/catalog/sync-service.ts`): estados `IN_SYNC`, `MISSING_FILE`, `STALE_FILE`, `PENDING_APPROVAL`, `CHANGED`, `NEW`, `INVALID`, `INACTIVE` y resultados `EXPORTED`, `REMOVED`, `IMPORTED`; modos `status`, `export` y `sync`; `overwrite` solo con `export` (migraciones; nunca borra archivos `NEW`). Una activación aprobada escribe el archivo (`ApprovalService.exportFilesAfter`, después de confirmar, para solicitudes de activación y de propuestas); desactivar lo borra. Un archivo cambiado se importa como versión nueva con su solicitud de activación (pendiente de aprobación); uno que coincide con una versión vieja o rechazada se reescribe desde la activa (por eso rechazar una importación devuelve el archivo a la activa). `sync` se niega si la base no tiene catálogo (hay que correr `pnpm db:seed`).
+- **Configuración** (`ConfigFileService`, `core.configFiles`, `packages/core/src/config/config-files.ts`): la base exporta en cada cambio (`setGlobal`, `saveProjectConfig`, `createProject`/`updateProject`, `policies.upsert`, conexiones, proveedores y propuestas vía el hook de aprobaciones). Un archivo editado a mano queda `CHANGED` (con diff) y solo se aplica con `apply` del propietario, con las mismas validaciones (piso de seguridad de políticas, todo o nada; nunca habilita escritura de conexiones; filtro de secretos de proveedores). Registro de hashes exportados y aplicados en `GlobalSetting` `catalog.files` (distingue `STALE_FILE` de una edición manual); `status()` puede registrar el hash de los archivos al día. Métodos nuevos: `ConfigService.createProject` / `updateProject` (las rutas de proyectos los usan) y `ProviderService.create`.
+- **Carga inicial** (`packages/core/src/seed/seed.ts`): primero `configFiles.seedFromFiles`, después los valores por defecto que falten; base sin catálogo → valida todo e instala los archivos como v1 `ACTIVE`; base con catálogo → solo informa el estado. Se borraron `packages/core/src/seed/{agents,skills,orchestrators}.ts`.
+- **Superficie**: API `GET /api/catalog/files`, `POST /api/catalog/files/sync { mode: sync|export, overwrite? }`, `POST /api/catalog/files/apply { files?, confirm: true }` (`apps/api/src/routes/catalog-files.ts`). Al arrancar, la API sincroniza según `MAO_CATALOG_SYNC` (`sync` por defecto, `export` u `off`; documentado en `.env.example`), escribe los archivos de configuración que faltan o quedaron viejos y avisa los que tienen cambios sin aplicar (no los toca); nunca impide arrancar. CLI: `pnpm mao files` (estado), `files sync`, `files export [--sobrescribir --confirmar]`, `files apply [--archivo <ruta>]... [--confirmar]` (sin `--confirmar`, solo vista previa). Scripts sin API, contra la base de `DATABASE_URL`: `pnpm catalog:status`, `catalog:sync`, `catalog:export [--sobrescribir]` (`packages/core/src/catalog/run-sync.ts`; también acepta `-- --sobrescribir`; sin confirmación adicional). UI: página *Archivos* (`apps/web/app/files/page.tsx`) en el menú *Configuración*; el detalle de agentes, skills y orquestadores muestra la ruta del archivo.
+- **Pruebas** (166 en total, todas pasan): la integración usa una copia del catálogo base fijo `packages/core/test/fixtures/catalog/` (las 17 definiciones iniciales; el catálogo de trabajo cambia con el uso y lo validan las pruebas unitarias) en `MAO_CATALOG_DIR` (por defecto `.data/test-catalog`, recreada por `global-setup`, obligatoriamente dentro de `.data/`; nunca `catalog/`). `TEST_DATABASE_URL` y `MAO_CATALOG_DIR` del proceso tienen prioridad sobre `.env` (también en `packages/db/scripts/prisma.mjs`), lo que permite bases `mao_test_*` paralelas. Nuevas: `packages/core/test/unit/{catalog-files,config-files}.test.ts`, `packages/core/test/integration/{catalog-files,config-files}.test.ts`, `apps/api/test/catalog-files.test.ts`.
+- **Arreglos en el camino**: `projectUpdateRequest` ya no aplica valores por defecto (un PATCH solo con `name` pasaba el proyecto a DEMO); `requestActivation` devuelve la versión a su estado si no se pudo crear la solicitud (política DENIED); el filtro de secretos de proveedores conserva `maxTokens`; crear o actualizar un proyecto con una conexión o un proveedor inexistente da 404.
+- **Migración hecha contra la base de trabajo (Railway)**: `pnpm catalog:export` sin sobrescribir. 17 definiciones ya coincidían; se exportaron las 4 skills activas que no tenían archivo (`AccessibilityWCAG`, `IntegrationResiliencePatterns`, `OracleSQLValidation`, `RegulatoryComplianceAR`) y los 5 archivos de configuración (`global.yaml`, `policies.yaml`, `connections.yaml`, `providers.yaml`, `projects/SCRUM.yaml`). En la base solo escribió metadatos (registro `catalog.files`) y auditoría.
+- **Consideraciones**: el repo es público, así que prompts, reglas, políticas y la configuración de `SCRUM` (incluidos ids y nombres de campos de Jira descubiertos) quedan versionados; borrar un archivo no desactiva nada (se vuelve a escribir desde la base; desactivar es desde la UI o la API); con dos máquinas sobre la misma base conviene hacer `git pull` antes de iniciar la API; los cambios de archivos se detectan al arrancar o con sync, no en vivo.
+- **Documentación**: README, ARCHITECTURE, DATA_MODEL, AGENTS, WORKFLOWS, APPROVAL_POLICIES, MCP_INTEGRATION, ROADMAP, CLAUDE.md y la skill `mao-platform` (sección *Archivos del catálogo*). La skill ya usaba ejemplos con `SCRUM`: el pendiente de documentación sobre `DEMO-100`/`DEMO-102` estaba resuelto.
+- **Cómo retomar**: `pnpm mao files` (o `pnpm catalog:status` sin API) tiene que mostrar todo al día. Para cambiar un prompt, una skill o un orquestador: editá el archivo, `pnpm mao files sync` y aprobá la `AP-n` que informa. Para la configuración: editá el YAML, `pnpm mao files apply` (diff) y `pnpm mao files apply --confirmar`. Pendientes (ROADMAP.md): detección en vivo, unificar los resúmenes duplicados (`summarizeCatalogReports` en core y `catalogFilesSummary` en la API) y E2E de la página *Archivos* con Playwright.
 
 ## Varias conexiones Jira (2026-10-09) — Implementado
 
@@ -122,6 +139,7 @@ Para elegir qué analizar sin escribir claves a mano: pantalla **Backlog de Jira
 | --- | --- |
 | Qué se hizo, qué se verificó, qué falta | Este archivo (secciones siguientes) |
 | Instalar, ejecutar, probar los dos flujos, activar Jira real | [README.md](README.md) → *Instalación*, *Ejecución*, *Probar los dos flujos*, *Activar la integración real con Jira* |
+| Editar agentes, skills, orquestadores o configuración en `catalog/` | [README.md](README.md) → *Catálogo y configuración en archivos*; detalle en [ARCHITECTURE.md](ARCHITECTURE.md) → *Catálogo y configuración en archivos* |
 | Reglas para desarrollar con Claude Code | [CLAUDE.md](CLAUDE.md) |
 | Arquitectura y decisiones técnicas | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Modelo de datos | [DATA_MODEL.md](DATA_MODEL.md) |
@@ -132,7 +150,7 @@ Para elegir qué analizar sin escribir claves a mano: pantalla **Backlog de Jira
 | Próximos pasos | [ROADMAP.md](ROADMAP.md) |
 | Design system (Flock IT) | [design-system/README.md](design-system/README.md) |
 
-Resumen en tres líneas: el MVP funciona de punta a punta contra el **Jira de prueba** (proyecto `SCRUM`, solo lectura) con **Claude Code local** como modelo real (proveedor por defecto); el **modelo simulado** y el proyecto `DEMO` quedan para las pruebas y para demos opcionales (`MAO_SEED_DEMO=true`); falta un **entorno de Jira autorizado** para habilitar escrituras (hoy bloqueadas a propósito).
+Resumen: el MVP funciona de punta a punta contra el **Jira de prueba** (proyecto `SCRUM`, solo lectura) con **Claude Code local** como modelo real (proveedor por defecto); el **modelo simulado** y el proyecto `DEMO` quedan para las pruebas y para demos opcionales (`MAO_SEED_DEMO=true`); falta un **entorno de Jira autorizado** para habilitar escrituras (hoy bloqueadas a propósito). Agentes, skills, orquestadores y la configuración sin secretos viven en **`catalog/`** (versionados con git): un cambio en un archivo entra como versión pendiente de aprobación (`pnpm mao files sync`) o, la configuración, se aplica con `pnpm mao files apply --confirmar`; nunca se activa solo.
 
 Prueba rápida de los dos flujos (con los servicios arriba y el MCP diagnosticado):
 
@@ -159,12 +177,13 @@ Para activar lo real:
 
 ## Cómo retomar en otra PC
 
-1. Cloná el repositorio (o copiá la carpeta). No incluye `.env`, `MCP/` ni `.data/`.
+1. Cloná el repositorio (o copiá la carpeta). Incluye `catalog/` (definiciones y configuración sin secretos); no incluye `.env`, `MCP/` ni `.data/`.
 2. Instalá el servidor MCP de Jira con `powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1` (requiere git y `uv`, `winget install astral-sh.uv`, o Python 3.10+) y completá `JIRA_URL`, `JIRA_USERNAME` y `JIRA_API_TOKEN` en `MCP\mcp-atlassian\.env`, que el script crea desde la plantilla si no existe. Ya no hace falta copiar `MCP/` aparte (ver MCP_INTEGRATION.md → *Instalación*).
 3. Para compartir la base de Railway: copiá `.env.example` a `.env` y poné en `DATABASE_URL` la URL de Railway (ver README → *Base de datos en Railway*) **antes** del paso siguiente. Los datos ya están en Railway: no hace falta copiarlos.
-4. `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (genera el token si falta, Postgres embebido para las pruebas, migraciones y seed idempotente sobre `DATABASE_URL`; sin datos demo salvo `MAO_SEED_DEMO=true`).
+4. `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (genera el token si falta, Postgres embebido para las pruebas, migraciones y seed idempotente sobre `DATABASE_URL`; en una base nueva instala el catálogo y la configuración desde `catalog/`; sin datos demo salvo `MAO_SEED_DEMO=true`).
 5. `powershell -ExecutionPolicy Bypass -File scripts\start.ps1` → http://127.0.0.1:3000 (con base remota no inicia el Postgres embebido) y `pnpm mao doctor --mcp` (MCP CONNECTED con 63 herramientas).
-6. `pnpm db:start` y `pnpm test` para confirmar el entorno.
+6. `pnpm mao files`: todo al día. Si dos PC comparten la base de Railway, hacé `git pull` antes de iniciar la API (el arranque sincroniza `catalog/` con la base).
+7. `pnpm db:start` y `pnpm test` para confirmar el entorno.
 
 ## Verificado (2026-10-09)
 
@@ -178,6 +197,7 @@ Para activar lo real:
 - Con la base en Railway: `pnpm test` **65 pruebas** (2 nuevas de `describeDatabaseUrl`), `pnpm typecheck`, `pnpm mao doctor` (trabajo: Railway con TLS; pruebas: local), servicios reiniciados con `start.ps1 -Background`, flujo A `EX-7` desde Claude Code → aprobación en lote `AP-7` (29 ítems) por CLI → publicación simulada `COMPLETED`; la UI muestra "PostgreSQL remoto con TLS".
 - Con acción y motivo y la cancelación por transición: `pnpm test` **89 pruebas**, todas pasan (incluida la cancelación contra el Jira simulado en modo real). Transiciones de `SCRUM` leídas con el MCP: no hay estado de cancelación.
 - Instalador del MCP: `scripts\setup-mcp.ps1` en una carpeta temporal → instalación nueva con 63 herramientas, igual que la existente.
+- Catálogo y configuración en archivos: `pnpm test` **166 pruebas**, todas pasan (formato y ida y vuelta sin pérdida de todos los archivos del repo, importación pendiente de aprobación, rechazo, sobrescribir, archivos inválidos, desactivar, configuración `CHANGED` con diff y `apply`, políticas todo o nada, API y arranque). Migración `pnpm catalog:export` contra la base de trabajo (ver *Definiciones y configuración como archivos*).
 
 ## Bugs encontrados y corregidos durante la verificación
 
@@ -198,7 +218,7 @@ Para activar lo real:
 - **Pendiente**: el modelo simulado no propone cancelar historias por sí solo (solo el modelo real o las pruebas).
 - **Pendiente (Jira)**: `SCRUM` no tiene estado de cancelación (Idea, Por hacer, En curso, Testing, Listo). Para ejecutar cancelaciones hay que agregar un estado "Cancelada" al flujo de Jira o mapear uno existente en *Transición para cancelar historias*.
 - **Pendiente (opcional)**: la skill `OracleSQLValidation` (CP-1) quedó activa en el catálogo pero no está en las skills de ningún proyecto (estaba asignada a `DEMO`, que se borró); agregarla a `SCRUM` si hace falta.
-- **Pendiente (documentación)**: `.claude/skills/mao-platform/SKILL.md` todavía usa ejemplos con `DEMO-100`/`DEMO-102`, que no existen en la base de trabajo sin datos demo.
+- **Pendiente (catálogo en archivos)**: detección en vivo de cambios en `catalog/` (hoy al arrancar la API o a pedido); unificar los resúmenes duplicados (`summarizeCatalogReports` en core y `catalogFilesSummary` en la API); verificación E2E de la página *Archivos* con Playwright.
 - **Parcial**: `claude doctor` no se puede automatizar (TUI interactiva); el diagnóstico propio cubre Node, pnpm, Docker, PostgreSQL, Claude Code, MCP y proveedores.
 
 ## Hallazgos del entorno (Fase 0)
@@ -217,6 +237,7 @@ Para activar lo real:
 - Proyecto demo `DEMO` (solo con `MAO_SEED_DEMO=true` y en las pruebas; ya no está en la base de Railway): épica `DEMO-100`, HU `DEMO-101/102/103` (103 contiene un intento de inyección para la demo), subtareas `DEMO-110/111/112`.
 - Proyecto real `SCRUM` (Jira de prueba vía MCP): épica `SCRUM-5` con las HU `SCRUM-6..10` (detalle en MCP_INTEGRATION.md).
 - Respaldo de la base de trabajo previo al reinicio para demo: `.data/backups/` (ignorado por git).
+- Definiciones y configuración: `catalog/` (fuente de verdad versionada). Catálogo base de las pruebas: `packages/core/test/fixtures/catalog/`, copiado a `.data/test-catalog` (ignorada por git, recreada en cada corrida).
 - Token del propietario: `MAO_OWNER_TOKEN` en `.env` (lo usan la CLI y el proxy de la UI; el navegador nunca lo recibe).
 - Scripts de verificación real: `scripts/verify-jira-read.mjs`, `scripts/verify-live-flow.mjs`.
 - Prueba de humo del motor sin servicios: `node --import tsx packages/core/scripts/smoke.ts EPIC|STORY`.

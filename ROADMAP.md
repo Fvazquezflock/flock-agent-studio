@@ -16,14 +16,18 @@
 - [Implementado] *Regenerar diseño* de CP-2 a CP-4 (2026-10-09): diseño regenerado con Claude Code; `RegulatoryComplianceAR`, `AccessibilityWCAG` e `IntegrationResiliencePatterns` creadas, activadas y agregadas a las skills de `SCRUM`.
 - [Implementado] Instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`, fijado en `ec54351`) para quien clone el repo, en lugar de copiar `MCP/` aparte.
 - [Implementado] Datos demo opcionales (`MAO_SEED_DEMO=true`); sin demo, el proveedor por defecto es Claude Code local. Base de trabajo reiniciada para la demo (ver PROGRESS.md).
-- [Pendiente] Actualizar los ejemplos de la skill `.claude/skills/mao-platform` (usan `DEMO`) para el proyecto real.
+- [Implementado] Ejemplos de la skill `.claude/skills/mao-platform` con el proyecto real (`SCRUM`); desde 2026-10-09 incluye `pnpm mao files`.
+- [Implementado] Definiciones y configuración como archivos en `catalog/` (fuente de verdad versionada con git; la base guarda copia de cada versión): exportación al aprobar, importación de definiciones como versiones pendientes de aprobación, configuración aplicada solo con acción explícita, página *Archivos*, `pnpm mao files` y `pnpm catalog:*`.
+- [Pendiente] Detectar en vivo los cambios en `catalog/` (hoy al arrancar la API o a pedido).
+- [Pendiente] Unificar los resúmenes de una línea duplicados (`summarizeCatalogReports` en `core/catalog/sync-service.ts` y `catalogFilesSummary` en `apps/api/src/routes/catalog-files.ts`).
+- [Pendiente] Prueba E2E de la página *Archivos* con Playwright (sincronizar, exportar con sobrescribir, aplicar con diff).
 
 - [Implementado] Varias conexiones Jira (distintos sitios y cuentas) con el mismo servidor MCP, cada una con su archivo de credenciales.
 - [Pendiente] Credenciales de Jira por usuario de la plataforma (relevamiento de usuarios; hoy cada conexión tiene una cuenta).
 
 ## Mediano plazo
 
-- Editor visual drag-and-drop de orquestadores (el modelo ya es un DAG declarativo con capas).
+- Editor visual drag-and-drop de orquestadores (el modelo ya es un DAG declarativo con capas; el YAML de `catalog/orchestrators/` también se puede editar a mano).
 - Usuarios, roles y autenticación (OIDC); aprobaciones por rol y doble aprobación para operaciones críticas.
 - Más proveedores (Claude Agent SDK, Bedrock/Vertex) sobre `IModelProvider`.
 - Transporte MCP Streamable HTTP para servidores remotos (`ConnectionKind.MCP_HTTP` ya existe en el modelo).

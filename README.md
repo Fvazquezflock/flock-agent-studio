@@ -4,7 +4,8 @@ Plataforma multiagente local, configurable, auditable y extensible. Primer caso 
 
 - **Dos puntos de entrada, un motor**: interfaz web (Next.js) y CLI `mao` (usable desde Claude Code con la skill `mao-platform`). Ambos llaman a la misma API, comparten ejecuciones, estados, aprobaciones y auditoría.
 - **La IA propone, el backend decide**: los agentes no tienen herramientas de escritura; toda operación externa pasa por un servicio que verifica aprobación (sobre el mismo contenido), política vigente y habilitación de escritura.
-- **Todo persistido**: agentes, skills y orquestadores versionados en PostgreSQL; ejecuciones recuperables tras reinicio; eventos en vivo por SSE.
+- **Definiciones y configuración en archivos**: agentes, skills, orquestadores y la configuración sin secretos viven en `catalog/`, versionados con git. Un archivo editado o traído con `git pull` nunca se activa solo: entra como versión pendiente de aprobación (o, la configuración, se aplica con una acción explícita).
+- **Todo persistido**: la base guarda una copia de cada versión (cada ejecución fija las suyas); ejecuciones recuperables tras reinicio; eventos en vivo por SSE.
 - **Design system Flock IT** (`design-system/`) aplicado a toda la UI.
 
 ## Estado
@@ -18,6 +19,7 @@ Plataforma multiagente local, configurable, auditable y extensible. Primer caso 
 | Acción y motivo de cada operación (Crear/Modificar/Cancelar, por qué, evidencia); cancelar HU por transición en Jira | Implementado y probado contra Jira simulado; en la CLI, pendiente |
 | Políticas configurables (global → proyecto → operación, piso de seguridad) | Implementado y probado |
 | Catálogo versionado (crear, editar, duplicar, comparar, probar, activar, desactivar, restaurar) | Implementado |
+| Catálogo y configuración en archivos (`catalog/`): exportación al aprobar, importación como versión pendiente de aprobación, configuración aplicada solo con acción explícita; página *Archivos*, `pnpm mao files`, `pnpm catalog:*` | Implementado y probado; los cambios en los archivos se detectan al arrancar la API o a pedido (no en vivo) |
 | Autoevolución supervisada (propuesta → plan crear/activar/asignar → una confirmación con aprobación individual de cada paso) | Implementado y probado |
 | MCP Jira (stdio, mcp-atlassian): diagnóstico, mapa de capacidades, lectura real | Implementado y verificado contra Jira Cloud |
 | Instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`) | Implementado y verificado (instalación nueva: 63 herramientas) |
@@ -45,7 +47,7 @@ Detalle y bitácora: [PROGRESS.md](PROGRESS.md).
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-Hace: verifica Node, instala pnpm si falta, crea `.env` (con un `MAO_OWNER_TOKEN` aleatorio), instala dependencias, levanta PostgreSQL embebido en `127.0.0.1:5433` (base de pruebas y, por defecto, de trabajo), aplica migraciones y carga datos iniciales en la base de `DATABASE_URL` (catálogo, políticas, proveedores y la conexión `jira-mcp`; sin datos demo, ver *Datos de demostración*) y genera los estilos del design system. Con Docker: `-UseDocker`. Para usar Railway, configurá `DATABASE_URL` **antes** de correrlo (ver abajo). El servidor MCP de Jira se instala aparte con `scripts\setup-mcp.ps1`.
+Hace: verifica Node, instala pnpm si falta, crea `.env` (con un `MAO_OWNER_TOKEN` aleatorio), instala dependencias, levanta PostgreSQL embebido en `127.0.0.1:5433` (base de pruebas y, por defecto, de trabajo), aplica migraciones y carga datos iniciales en la base de `DATABASE_URL` (primero lo que falte de la configuración de `catalog/`: global, proveedores, conexiones, proyectos y políticas; después los valores por defecto que falten, incluida la conexión `jira-mcp`; en una base sin catálogo, instala todos los agentes, skills y orquestadores de `catalog/` como v1 activas; sin datos demo, ver *Datos de demostración*) y genera los estilos del design system. Con Docker: `-UseDocker`. Para usar Railway, configurá `DATABASE_URL` **antes** de correrlo (ver abajo). El servidor MCP de Jira se instala aparte con `scripts\setup-mcp.ps1`.
 
 ### Servidor MCP de Jira
 
@@ -70,7 +72,7 @@ Una conexión es un sitio de Jira con su cuenta: el mismo servidor MCP, otro arc
 2. *Configuración → Ajustes generales → Conexiones MCP → Nueva conexión Jira*: clave (p. ej. `jira-cliente-x`), nombre y archivo de credenciales. También por API: `POST /api/connections { key, name, envFile }` y `PATCH /api/connections/:key`.
 3. *Diagnosticar* la conexión y, en la ficha del proyecto (*Configuración → Proyectos*), elegirla en *Conexión*.
 
-Reglas: el archivo tiene que estar dentro de `MCP/` y terminar en `.env` (se rechazan rutas absolutas o con `..`); el ejecutable es siempre el del servidor MCP configurado (`MAO_JIRA_MCP_COMMAND`), no se acepta un comando arbitrario; cada conexión arranca con la escritura deshabilitada y se habilita por separado. Credenciales por usuario de la plataforma: pendiente (hoy cada conexión tiene una cuenta).
+Reglas: el archivo tiene que estar dentro de `MCP/` y terminar en `.env` (se rechazan rutas absolutas o con `..`); el ejecutable es siempre el del servidor MCP configurado (`MAO_JIRA_MCP_COMMAND`), no se acepta un comando arbitrario; cada conexión arranca con la escritura deshabilitada y se habilita por separado. Las conexiones se exportan a `catalog/connections.yaml` (clave, nombre, tipo, propósito y ruta del archivo de credenciales; nunca el comando ni si la escritura está habilitada). Credenciales por usuario de la plataforma: pendiente (hoy cada conexión tiene una cuenta).
 
 ### Datos de demostración
 
@@ -106,6 +108,50 @@ Diagnóstico (Disponible / No configurado / Error, sin imprimir credenciales):
 pnpm doctor            # local
 pnpm mao doctor --mcp  # además inicia el MCP de Jira y diagnostica proveedores en vivo
 ```
+
+## Catálogo y configuración en archivos (`catalog/`)
+
+Las definiciones de agentes, skills y orquestadores y la configuración sin secretos son archivos versionados con git en `catalog/` (otra carpeta con `MAO_CATALOG_DIR`, relativa a la raíz del repo). La base guarda una copia de cada versión (las ejecuciones fijan versiones; la auditoría, el diff y *Restaurar* las usan), los borradores y las propuestas sin aprobar. Regla: **un archivo editado a mano o traído con `git pull` nunca se activa ni se aplica solo**.
+
+```
+catalog/
+  agents/<Clave>.md            frontmatter YAML + prompt de sistema en el cuerpo
+  skills/<Clave>/SKILL.md      frontmatter YAML + instrucciones en el cuerpo (estilo Claude Code)
+  orchestrators/<CLAVE>.yaml   definición completa del flujo
+  global.yaml                  configuración global
+  policies.yaml                políticas de aprobación activas (sin las de proyectos DEMO)
+  connections.yaml             conexiones MCP: clave, nombre, tipo, propósito y envFile (sin comando, estado ni writeEnabled)
+  providers.yaml               proveedores de IA sin el simulado; la API key solo como nombre de variable (apiKeyEnv)
+  projects/<CLAVE>.yaml        metadatos y configuración activa del proyecto (sin proyectos DEMO)
+```
+
+- **De la base a los archivos (automático)**: aprobar una activación o una propuesta escribe el archivo de la versión activa; desactivar lo borra. Cada cambio de configuración (UI, CLI, API o propuesta aplicada) reescribe su archivo.
+- **De los archivos a la base (siempre con una decisión humana)**: un agente, skill u orquestador editado o nuevo se importa al sincronizar como versión **pendiente de aprobación** con su solicitud de activación (`AP-n`); la versión activa no cambia hasta aprobarla. Un archivo de configuración editado a mano queda *Cambios sin aplicar* (con diff) y solo se aplica con `apply`, con las mismas validaciones que la UI.
+- **Al arrancar la API** (`MAO_CATALOG_SYNC`: `sync` por defecto, `export` u `off`): exporta lo aprobado, importa los cambios de definiciones como pendientes de aprobación, escribe los archivos de configuración que faltan o quedaron viejos y avisa cuáles tienen cambios sin aplicar (esos no se tocan). Un problema con los archivos nunca impide arrancar. Fuera del arranque, los cambios se detectan solo a pedido (no en vivo).
+- `.gitattributes` fuerza fin de línea LF en `catalog/` (el hash normalizado ignora igual fines de línea, BOM, comentarios y orden de claves).
+
+```powershell
+pnpm mao files                                     # estado de cada archivo frente a la base
+pnpm mao files sync                                # exporta lo aprobado e importa los cambios como pendientes de aprobación
+pnpm mao files export                              # escribe desde la base sin pisar archivos con cambios sin importar
+pnpm mao files export --sobrescribir --confirmar   # migraciones: también reemplaza esos archivos (los cambios se pierden)
+pnpm mao files apply [--archivo projects/SCRUM.yaml]   # muestra el diff de la configuración editada a mano; no cambia nada
+pnpm mao files apply [--archivo ...] --confirmar   # la aplica a la base
+pnpm catalog:status                                # sin API, contra la base de DATABASE_URL (también catalog:sync y catalog:export)
+pnpm catalog:export --sobrescribir                 # sin confirmación adicional: solo para migraciones
+```
+
+En la UI: *Configuración → Archivos* (estado, *Sincronizar*, *Exportar desde la base* —sobrescribir pide escribir `SOBRESCRIBIR`— y *Aplicar* con diff); el detalle de cada agente, skill u orquestador muestra la ruta de su archivo. API: `GET /api/catalog/files`, `POST /api/catalog/files/sync { mode: sync|export, overwrite? }`, `POST /api/catalog/files/apply { files?, confirm: true }`.
+
+Tené en cuenta:
+
+- El repo es público: prompts, reglas, políticas y la configuración de `SCRUM` (incluidos ids y nombres de los campos de Jira descubiertos) quedan versionados. Credenciales y hosts no: viven en `.env` y en `MCP/`.
+- Borrar un archivo no desactiva nada: se vuelve a escribir desde la base. Para desactivar, usá la UI o la API.
+- Rechazar una versión importada vuelve el archivo a la versión activa (o lo borra si la entidad no tiene versión activa); lo editado se recupera desde git.
+- Con dos máquinas sobre la misma base, hacé `git pull` antes de iniciar la API.
+- En una base sin catálogo, la sincronización no importa nada: corré `pnpm db:seed`, que instala los archivos como v1 activas.
+
+Detalle en [ARCHITECTURE.md](ARCHITECTURE.md) → *Catálogo y configuración en archivos*.
 
 ## Elegir qué analizar: backlog de Jira
 
@@ -192,11 +238,13 @@ En Claude Code basta con pedir *"Analizá la épica SCRUM-5 y proponé historias
 ## Pruebas
 
 ```powershell
-pnpm test              # unitarias + integración (89 pruebas)
+pnpm test              # unitarias + integración (166 pruebas)
 pnpm test:unit
 pnpm test:integration  # recrea la base mao_test; usa un Jira simulado; nunca escribe en Jira real
 pnpm typecheck
 ```
+
+Las pruebas de integración usan una copia del catálogo base fijo `packages/core/test/fixtures/catalog/` (no del catálogo de trabajo, que cambia con el uso; ese lo validan las pruebas unitarias) en `.data/test-catalog` (`MAO_CATALOG_DIR`, recreada en cada corrida; tiene que estar dentro de `.data/`): nunca escriben en `catalog/`. `TEST_DATABASE_URL` y `MAO_CATALOG_DIR` definidas en el proceso tienen prioridad sobre `.env`, lo que permite correr suites en paralelo contra otras bases `mao_test_*`.
 
 ## Activar la integración real con Jira
 
