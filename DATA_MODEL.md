@@ -9,7 +9,7 @@ Fuente: `packages/db/prisma/schema.prisma` · Migraciones: `packages/db/prisma/m
 | `Project` | Proyecto de la plataforma (clave, proyecto Jira, modo DEMO/JIRA, conexión, proveedor) | |
 | `ProjectConfiguration` | Configuración versionada del proyecto (JSON validado) | Única `ACTIVE`; nuevas versiones dejan la anterior `INACTIVE`. Incluye `jira.cancelTransition { id, name }` (transición para cancelar HU) y `jira.discovered.transitions` / `transitionsFrom` (transiciones descubiertas y la historia de muestra) |
 | `GlobalSetting` | Configuración global (`global.config`) | Base de la herencia; reglas obligatorias fijas |
-| `Connection` | Conexión MCP (stdio/HTTP), mapa de capacidades, escritura habilitada | Sin secretos: solo comando y `--env-file` |
+| `Connection` | Conexión MCP (stdio/HTTP), mapa de capacidades, escritura habilitada. Puede haber varias conexiones Jira (otros sitios o cuentas) con el mismo servidor | Sin secretos: solo el comando fijo del servidor y `--env-file` (dentro de `MCP/`, terminado en `.env`) |
 | `ModelProviderConfiguration` | Proveedores de IA (MOCK, LOCAL_CLAUDE, ANTHROPIC_API) | Solo el nombre de la variable de la API key |
 | `Agent` / `AgentVersion` | Agente y sus versiones (definición JSON + checksum) | `activeVersionId` apunta a la versión ACTIVA |
 | `Skill` / `SkillVersion` | Skills versionadas | |

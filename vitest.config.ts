@@ -16,7 +16,7 @@ export default defineConfig({
           include: ['packages/*/test/integration/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
           environment: 'node',
           // Base de datos de prueba aislada (mao_test): nunca toca la base de trabajo ni Jira real.
-          env: { MAO_USE_TEST_DB: '1', MAO_ALLOW_JIRA_WRITES: 'false' },
+          env: { MAO_USE_TEST_DB: '1', MAO_ALLOW_JIRA_WRITES: 'false', MAO_SEED_DEMO: 'true' },
           globalSetup: ['packages/core/test/integration/global-setup.ts'],
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },

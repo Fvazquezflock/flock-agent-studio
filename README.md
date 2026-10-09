@@ -20,9 +20,11 @@ Plataforma multiagente local, configurable, auditable y extensible. Primer caso 
 | Catálogo versionado (crear, editar, duplicar, comparar, probar, activar, desactivar, restaurar) | Implementado |
 | Autoevolución supervisada (propuesta → plan crear/activar/asignar → una confirmación con aprobación individual de cada paso) | Implementado y probado |
 | MCP Jira (stdio, mcp-atlassian): diagnóstico, mapa de capacidades, lectura real | Implementado y verificado contra Jira Cloud |
+| Instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`) | Implementado y verificado (instalación nueva: 63 herramientas) |
 | Escritura real en Jira | Implementada, **deshabilitada por defecto** y no probada contra Jira real (solo contra Jira simulado) |
-| `MockModelProvider` (simulación determinística) | Implementado (es el proveedor por defecto) |
-| `LocalClaudeRunner` (`claude -p`) | Implementado y verificado con modelo real (EX-13, flujo A sobre `SCRUM-5`); requiere sesión de Claude Code (`claude auth login`) |
+| `MockModelProvider` (simulación determinística) | Implementado; solo se crea con datos demo (`MAO_SEED_DEMO=true`) y lo usan las pruebas |
+| `LocalClaudeRunner` (`claude -p`) | Implementado y verificado con modelo real (flujo A sobre `SCRUM-5`); es el proveedor por defecto; requiere sesión de Claude Code (`claude auth login`) |
+| Datos de demostración (proyecto `DEMO` y proveedor simulado) | Implementado, opcionales (`MAO_SEED_DEMO=true`); por defecto no se crean |
 | `AnthropicApiProvider` (SDK oficial) | Implementado; **no configurado** (falta `ANTHROPIC_API_KEY`) |
 | Editor visual drag-and-drop de orquestadores | Pendiente (hay editor por formularios + diagrama) |
 | Usuarios, roles y autenticación multiusuario | Pendiente (MVP con propietario único + token) |
@@ -35,7 +37,7 @@ Detalle y bitácora: [PROGRESS.md](PROGRESS.md).
 - pnpm 10 (el script de instalación lo instala si falta).
 - PostgreSQL de trabajo: **Railway** (remoto, configurado en esta PC), **embebido** (sin Docker, incluido) o Docker Desktop (`docker compose up -d`, mismo puerto y credenciales). Las pruebas de integración usan siempre el embebido local (`mao_test`).
 - Opcional: Claude Code CLI con sesión iniciada (`claude auth login`) o una API key de Anthropic.
-- Opcional: el servidor MCP de Jira en `MCP/mcp-atlassian` con su `.env`.
+- Para trabajar con Jira: git y `uv` (recomendado: instala Python solo; `winget install astral-sh.uv`) o un Python 3.10+ real, para instalar el servidor MCP con `scripts\setup-mcp.ps1` (ver *Servidor MCP de Jira*). No hace falta copiar `MCP/` aparte.
 
 ## Instalación
 
@@ -43,7 +45,36 @@ Detalle y bitácora: [PROGRESS.md](PROGRESS.md).
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-Hace: verifica Node, instala pnpm si falta, crea `.env` (con un `MAO_OWNER_TOKEN` aleatorio), instala dependencias, levanta PostgreSQL embebido en `127.0.0.1:5433` (base de pruebas y, por defecto, de trabajo), aplica migraciones y carga datos iniciales en la base de `DATABASE_URL` y genera los estilos del design system. Con Docker: `-UseDocker`. Para usar Railway, configurá `DATABASE_URL` **antes** de correrlo (ver abajo).
+Hace: verifica Node, instala pnpm si falta, crea `.env` (con un `MAO_OWNER_TOKEN` aleatorio), instala dependencias, levanta PostgreSQL embebido en `127.0.0.1:5433` (base de pruebas y, por defecto, de trabajo), aplica migraciones y carga datos iniciales en la base de `DATABASE_URL` (catálogo, políticas, proveedores y la conexión `jira-mcp`; sin datos demo, ver *Datos de demostración*) y genera los estilos del design system. Con Docker: `-UseDocker`. Para usar Railway, configurá `DATABASE_URL` **antes** de correrlo (ver abajo). El servidor MCP de Jira se instala aparte con `scripts\setup-mcp.ps1`.
+
+### Servidor MCP de Jira
+
+`MCP/mcp-atlassian` no se versiona en este repo: es el proyecto público [sooperset/mcp-atlassian](https://github.com/sooperset/mcp-atlassian) (licencia MIT), guarda las credenciales en su `.env` y trae un entorno Python pesado. Se instala con:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 [-Ref ec54351] [-Dir MCP\mcp-atlassian] [-Force]
+```
+
+- Requiere git y `uv` (recomendado; `winget install astral-sh.uv`) o un Python 3.10+ real (ignora el acceso directo de Microsoft Store).
+- Crea `MCP\mcp-atlassian\.venv` e instala `mcp-atlassian` desde GitHub fijado en el commit verificado `ec54351` (63 herramientas, incluidas las de transición). Si ya está instalado no reinstala, salvo con `-Force`.
+- Si no existe, crea `MCP\mcp-atlassian\.env` desde la plantilla `scripts\mcp-atlassian.env.example`. Nunca pisa un `.env` existente.
+- Después: completá `JIRA_URL`, `JIRA_USERNAME` y `JIRA_API_TOKEN` en ese `.env` (el token se genera en https://id.atlassian.com/manage-profile/security/api-tokens), iniciá la plataforma y corré `pnpm mao doctor --mcp` (tiene que dar CONNECTED con 63 herramientas).
+
+Detalle en [MCP_INTEGRATION.md](MCP_INTEGRATION.md) → *Instalación*.
+
+### Varias conexiones Jira (otros sitios o cuentas)
+
+Una conexión es un sitio de Jira con su cuenta: el mismo servidor MCP, otro archivo de credenciales (`JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`). Sirve para trabajar con varios dominios de Jira o con cuentas de distintas personas. La plataforma solo guarda la ruta del archivo, nunca las credenciales.
+
+1. Creá el archivo desde la plantilla (dentro de `MCP/`, ignorado por git): `powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -EnvFile MCP\mcp-atlassian\cliente-x.env` y completalo.
+2. *Configuración → Ajustes generales → Conexiones MCP → Nueva conexión Jira*: clave (p. ej. `jira-cliente-x`), nombre y archivo de credenciales. También por API: `POST /api/connections { key, name, envFile }` y `PATCH /api/connections/:key`.
+3. *Diagnosticar* la conexión y, en la ficha del proyecto (*Configuración → Proyectos*), elegirla en *Conexión*.
+
+Reglas: el archivo tiene que estar dentro de `MCP/` y terminar en `.env` (se rechazan rutas absolutas o con `..`); el ejecutable es siempre el del servidor MCP configurado (`MAO_JIRA_MCP_COMMAND`), no se acepta un comando arbitrario; cada conexión arranca con la escritura deshabilitada y se habilita por separado. Credenciales por usuario de la plataforma: pendiente (hoy cada conexión tiene una cuenta).
+
+### Datos de demostración
+
+`pnpm db:seed` (y `setup.ps1`) **no** crean el proyecto `DEMO` ni el proveedor simulado: sin demo, el proveedor por defecto es Claude Code local (`claude-local`) y se trabaja contra el Jira registrado (en una base nueva el seed no crea proyectos: crealo como se indica en *Activar la integración real con Jira*). Para tenerlos, poné `MAO_SEED_DEMO=true` en `.env` (documentado en `.env.example`) y corré `pnpm db:seed`. Las pruebas de integración los crean siempre (vitest fija `MAO_SEED_DEMO=true`).
 
 ### Base de datos en Railway
 
@@ -121,17 +152,34 @@ Sin transición mapeada, la publicación real omite esas cancelaciones con el av
 
 ## Probar los dos flujos
 
-### Desde la UI
+Hay dos caminos: contra el Jira real con Claude Code (el normal) o con los datos demo simulados.
+
+### Con Jira real y Claude Code (UI)
+
+Requiere el servidor MCP instalado y diagnosticado (*Servidor MCP de Jira*), sesión de Claude Code (`claude auth login`) y un proyecto en modo *Jira real*: en la base de Railway ya está `SCRUM`; en una base nueva, crealo como se indica en *Activar la integración real con Jira*.
+
+1. **Backlog de Jira** → proyecto `SCRUM` → desplegá la épica `SCRUM-5`.
+2. *Analizar épica* (flujo A) sobre `SCRUM-5`, o *Validar HU* (flujo B) sobre una de sus historias (por ejemplo `SCRUM-7`). Se abre *Nueva ejecución* precargada: dejá el proveedor *Claude Code local* (por defecto) e iniciá.
+3. Seguí el flujo en vivo (con modelo real, el flujo A sobre `SCRUM-5` tardó unos 11 minutos y consume la cuota de la cuenta de Claude). En *Aprobación* revisá, editá, aprobá (individual o por lote) o *Rechazar y regenerar*. Con la escritura deshabilitada (por defecto) la publicación queda **bloqueada** y no se escribe nada en Jira.
+
+### Con datos demo (UI)
+
+Requiere `MAO_SEED_DEMO=true` y `pnpm db:seed` (ver *Datos de demostración*); en la base de Railway el proyecto `DEMO` ya no existe. Elegí el proveedor simulado.
 
 1. **Nueva ejecución** → proyecto `DEMO` → `Épica → Historias → Tareas` → épica `DEMO-100` → *Iniciar*. Seguí el flujo en vivo; al llegar a *Aprobación* entrá en la solicitud, editá lo que quieras, aprobá (individual o por lote) o *Rechazar y regenerar*. La publicación es **simulada** (claves `SIM-n-m`).
 2. Lo mismo con `HU existente → Validación → Tareas` y la historia `DEMO-102`: diagnóstico, diferencias original/propuesto, tareas faltantes (la de backend se detecta como duplicada de `DEMO-112`).
-3. **Propuestas** (*Configuración → Propuestas*): el supervisor detecta que "Oracle SQL" no está cubierto y deja la propuesta `CP-1` en borrador. La pantalla muestra el plan de implementación (crear la skill, activarla y agregarla a las skills del proyecto de origen, con los agentes que la van a recibir). *Confirmar e implementar* registra tu aprobación de cada paso y aplica todo; también podés *Enviar a aprobación* y decidir cada paso desde *Aprobaciones*. Si la definición tiene errores, *Regenerar diseño* le pide una nueva a CapabilityDesigner. Cada propuesta indica si **crea**, **modifica** (nueva versión de una capacidad existente, que se activa) o **cancela** una capacidad (la quita de las skills del proyecto de origen y la desactiva en el catálogo), con la evidencia que la justifica: la columna *Acción* del listado y la tarjeta *Qué propone y por qué* del detalle muestran el problema, la justificación y las inconsistencias o brechas encontradas.
+3. **Propuestas** (*Configuración → Propuestas*): el supervisor detecta que "Oracle SQL" no está cubierto (si la skill `OracleSQLValidation` todavía no existe) y deja una propuesta en borrador. La pantalla muestra el plan de implementación (crear la skill, activarla y agregarla a las skills del proyecto de origen, con los agentes que la van a recibir). *Confirmar e implementar* registra tu aprobación de cada paso y aplica todo; también podés *Enviar a aprobación* y decidir cada paso desde *Aprobaciones*. Si la definición tiene errores, *Regenerar diseño* le pide una nueva a CapabilityDesigner. Cada propuesta indica si **crea**, **modifica** (nueva versión de una capacidad existente, que se activa) o **cancela** una capacidad (la quita de las skills del proyecto de origen y la desactiva en el catálogo), con la evidencia que la justifica: la columna *Acción* del listado y la tarjeta *Qué propone y por qué* del detalle muestran el problema, la justificación y las inconsistencias o brechas encontradas.
 
 ### Desde la terminal (o Claude Code)
 
 ```powershell
+# Jira real (SCRUM) con Claude Code
+pnpm mao ask "Analizá la épica SCRUM-5 y proponé historias y tareas técnicas." --project SCRUM --wait
+pnpm mao run STORY_REVIEW_AND_DECOMPOSITION --project SCRUM --story SCRUM-7 --provider claude-local --wait
+# Datos demo (requiere MAO_SEED_DEMO=true)
 pnpm mao ask "Analizá la épica DEMO-100 y proponé historias y tareas técnicas." --wait
 pnpm mao run STORY_REVIEW_AND_DECOMPOSITION --project DEMO --story DEMO-102 --wait
+# Aprobaciones
 pnpm mao approvals
 pnpm mao approval 1                                   # muestra ítems y hash de confirmación
 pnpm mao approve 1 --batch --confirm <hash>
@@ -139,7 +187,7 @@ pnpm mao approve 1 --items story:update --confirm <hash>
 pnpm mao result EX-1
 ```
 
-En Claude Code basta con pedir *"Analizá la épica DEMO-100 y proponé historias y tareas técnicas"*: la skill `.claude/skills/mao-platform` usa la CLI y pide confirmación antes de aprobar. Las ejecuciones aparecen en la UI con origen *Claude Code*.
+En Claude Code basta con pedir *"Analizá la épica SCRUM-5 y proponé historias y tareas técnicas"* (o `DEMO-100` con datos demo): la skill `.claude/skills/mao-platform` usa la CLI y pide confirmación antes de aprobar. Las ejecuciones aparecen en la UI con origen *Claude Code*.
 
 ## Pruebas
 
@@ -152,7 +200,7 @@ pnpm typecheck
 
 ## Activar la integración real con Jira
 
-1. Lectura (ya funciona): creá un proyecto en modo **Jira real** con la conexión `jira-mcp`, ejecutá *Descubrir tipos y campos* y mapeá los tipos reales (por ejemplo, el proyecto `SCRUM` usa `Epic`/`Historia`/`Tarea`/`Subtask`). `node scripts/verify-jira-read.mjs SCRUM SCRUM-1` y `node scripts/verify-live-flow.mjs SCRUM SCRUM-1` lo verifican sin escribir. Si querés que se puedan cancelar historias, elegí también la *Transición para cancelar historias* (ver *Aprobaciones: qué se propone y por qué*).
+1. Lectura (ya funciona): instalá el servidor MCP y completá su `.env` (ver *Servidor MCP de Jira*), creá un proyecto en modo **Jira real** con la conexión `jira-mcp`, ejecutá *Descubrir tipos y campos* y mapeá los tipos reales (por ejemplo, el proyecto `SCRUM` usa `Epic`/`Historia`/`Tarea`/`Subtask`). `node scripts/verify-jira-read.mjs SCRUM SCRUM-1` y `node scripts/verify-live-flow.mjs SCRUM SCRUM-1` lo verifican sin escribir. Si querés que se puedan cancelar historias, elegí también la *Transición para cancelar historias* (ver *Aprobaciones: qué se propone y por qué*).
 2. Escritura (deshabilitada): en un **entorno de prueba autorizado**, poné `MAO_ALLOW_JIRA_WRITES=true` en `.env`, reiniciá API y worker, y en *Configuración → Ajustes generales → Conexiones MCP* habilitá la escritura escribiendo `HABILITAR ESCRITURA`. Verificá antes en ese entorno la semántica de vínculos (`inward/outward`) y del campo `parent` (ver [MCP_INTEGRATION.md](MCP_INTEGRATION.md)).
 3. Modelo real: `claude auth login` para el runner local, o `ANTHROPIC_API_KEY` para la API; luego elegí el proveedor en *Configuración → Ajustes generales → Proveedores de IA*.
 

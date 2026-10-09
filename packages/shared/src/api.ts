@@ -13,6 +13,20 @@ export const createExecutionRequest = z.object({
 });
 export type CreateExecutionRequest = z.infer<typeof createExecutionRequest>;
 
+/**
+ * Conexión Jira adicional (otro sitio, otra cuenta): mismo servidor MCP, otro archivo de credenciales.
+ * Solo se guarda la ruta del archivo (dentro de MCP/, terminado en .env); nunca los secretos.
+ */
+export const connectionCreateRequest = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9-]{1,39}$/, 'Clave en minúsculas, números y guiones (2 a 40 caracteres)'),
+  name: z.string().min(2).max(120),
+  envFile: z.string().min(5).max(200),
+});
+export const connectionUpdateRequest = z.object({
+  name: z.string().min(2).max(120).optional(),
+  envFile: z.string().min(5).max(200).optional(),
+});
+
 /** Backlog de Jira (solo lectura): épicas o historias del proyecto para elegir qué analizar. */
 export const backlogQuery = z.object({
   kind: z.enum(['epic', 'story']).default('epic'),

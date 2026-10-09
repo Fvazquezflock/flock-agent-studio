@@ -51,8 +51,8 @@ Campos de los contratos (`packages/shared/src/tasks.ts`) que alimentan la acció
 
 | Proveedor | Estado | Detalle |
 | --- | --- | --- |
-| `MockModelProvider` (`mock`, predeterminado) | Implementado | Heurísticas determinísticas sobre el contexto; resultados marcados `simulated`. No es IA. |
-| `LocalClaudeRunner` (`claude-local`) | Implementado y verificado con modelo real (requiere `claude auth login`) | `claude -p --output-format json --json-schema … --tools "" --strict-mcp-config --no-session-persistence`, prompt por stdin, directorio aislado, cancelación con `taskkill /T`. Requiere `claude auth login`. |
+| `MockModelProvider` (`mock`, predeterminado solo con datos demo) | Implementado | Heurísticas determinísticas sobre el contexto; resultados marcados `simulated`. No es IA. El seed lo crea solo con `MAO_SEED_DEMO=true` (las pruebas lo fijan). |
+| `LocalClaudeRunner` (`claude-local`, predeterminado sin datos demo) | Implementado y verificado con modelo real (requiere `claude auth login`) | `claude -p --output-format json --json-schema … --tools "" --strict-mcp-config --no-session-persistence`, prompt por stdin, directorio aislado, cancelación con `taskkill /T`. Requiere `claude auth login`. |
 | `AnthropicApiProvider` (`anthropic-api`) | Implementado, no configurado | SDK oficial, `claude-opus-5-5`, salida estructurada (`output_config.format`), fallback del lado del servidor ante rechazos, sin reintentos del SDK (los gobierna el motor). Requiere `ANTHROPIC_API_KEY`. |
 
 ## Exportación a Claude Code

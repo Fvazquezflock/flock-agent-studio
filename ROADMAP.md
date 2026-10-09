@@ -13,7 +13,13 @@
 - [Pendiente] Mostrar acción y motivo de cada ítem en la CLI (`pnpm mao approval`); hoy solo en la UI.
 - [Pendiente] Que el modelo simulado genere recomendaciones de cancelar historias (hoy solo el modelo real o las pruebas).
 - [Bloqueado: configuración de Jira] Cancelaciones en `SCRUM`: el flujo no tiene estado de cancelación (Idea, Por hacer, En curso, Testing, Listo). Agregar un estado "Cancelada" en Jira (o mapear uno existente) y elegirlo en *Transición para cancelar historias*.
-- [Pendiente: usuario] *Regenerar diseño* de CP-2 a CP-4 antes de implementarlas.
+- [Implementado] *Regenerar diseño* de CP-2 a CP-4 (2026-10-09): diseño regenerado con Claude Code; `RegulatoryComplianceAR`, `AccessibilityWCAG` e `IntegrationResiliencePatterns` creadas, activadas y agregadas a las skills de `SCRUM`.
+- [Implementado] Instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`, fijado en `ec54351`) para quien clone el repo, en lugar de copiar `MCP/` aparte.
+- [Implementado] Datos demo opcionales (`MAO_SEED_DEMO=true`); sin demo, el proveedor por defecto es Claude Code local. Base de trabajo reiniciada para la demo (ver PROGRESS.md).
+- [Pendiente] Actualizar los ejemplos de la skill `.claude/skills/mao-platform` (usan `DEMO`) para el proyecto real.
+
+- [Implementado] Varias conexiones Jira (distintos sitios y cuentas) con el mismo servidor MCP, cada una con su archivo de credenciales.
+- [Pendiente] Credenciales de Jira por usuario de la plataforma (relevamiento de usuarios; hoy cada conexión tiene una cuenta).
 
 ## Mediano plazo
 

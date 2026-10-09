@@ -24,7 +24,12 @@ const MANDATORY_OPS = ['DELETE_EXTERNAL', 'ACTIVATE_SKILL', 'ACTIVATE_ORCHESTRAT
  * Carga inicial idempotente: crea lo que falta y nunca pisa cambios del usuario.
  * Las versiones iniciales quedan ACTIVE porque las instala el propietario al configurar la plataforma (queda auditado).
  */
-export async function seedDatabase(core: Core, log: (m: string) => void = () => {}) {
+/**
+ * Con `demo` (o MAO_SEED_DEMO=true) también crea el proveedor simulado y el proyecto DEMO con datos ficticios (pruebas).
+ * Sin demo, el proveedor por defecto es Claude Code local y solo se trabaja contra el Jira registrado.
+ */
+export async function seedDatabase(core: Core, log: (m: string) => void = () => {}, opts: { demo?: boolean } = {}) {
+  const demo = opts.demo ?? process.env.MAO_SEED_DEMO === 'true';
   const prisma = core.deps.prisma;
   const actor = { type: 'SYSTEM' as const, id: SEED_ACTOR };
 
@@ -57,8 +62,8 @@ export async function seedDatabase(core: Core, log: (m: string) => void = () => 
 
   // ---- Proveedores de IA (sin secretos) ----
   const providers = [
-    { key: 'mock', name: 'Simulación determinística', kind: 'MOCK' as const, config: { note: 'Heurísticas sin IA para demo y pruebas' }, isDefault: true },
-    { key: 'claude-local', name: 'Claude Code local (claude -p)', kind: 'LOCAL_CLAUDE' as const, config: { bin: process.env.MAO_CLAUDE_BIN || 'claude', model: 'default', effort: 'medium' }, isDefault: false },
+    ...(demo ? [{ key: 'mock', name: 'Simulación determinística', kind: 'MOCK' as const, config: { note: 'Heurísticas sin IA para demo y pruebas' }, isDefault: true }] : []),
+    { key: 'claude-local', name: 'Claude Code local (claude -p)', kind: 'LOCAL_CLAUDE' as const, config: { bin: process.env.MAO_CLAUDE_BIN || 'claude', model: 'default', effort: 'medium' }, isDefault: !demo },
     { key: 'anthropic-api', name: 'API de Anthropic', kind: 'ANTHROPIC_API' as const, config: { model: 'claude-opus-5-5', apiKeyEnv: 'ANTHROPIC_API_KEY', effort: 'medium' }, isDefault: false },
   ];
   for (const p of providers) {
@@ -151,7 +156,7 @@ export async function seedDatabase(core: Core, log: (m: string) => void = () => 
   }
 
   // ---- Proyecto demo ----
-  if (!(await prisma.project.findUnique({ where: { key: 'DEMO' } }))) {
+  if (demo && !(await prisma.project.findUnique({ where: { key: 'DEMO' } }))) {
     const gw = new DemoJiraGateway();
     const mock = await prisma.modelProviderConfiguration.findUniqueOrThrow({ where: { key: 'mock' } });
     const config = projectConfigSchema.parse({

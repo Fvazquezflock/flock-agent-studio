@@ -78,9 +78,50 @@ function ConnectionsTab() {
   const [read, setRead] = useState<Record<string, any>>({});
   const [params, setParams] = useState({ projectKey: '', issueKey: '' });
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [nc, setNc] = useState({ key: '', name: '', envFile: '' });
   if (!data) return error ? <ErrorBox error={error} onRetry={reload} /> : <Loading />;
+  const envFile = nc.envFile || `MCP/mcp-atlassian/${nc.key || 'otro-jira'}.env`;
   return (
     <div className="flex flex-col gap-4">
+      <Card
+        title="Nueva conexión Jira"
+        subtitle="Otro sitio de Jira u otra cuenta (dominio, mail y token propios) con el mismo servidor MCP. Cada proyecto elige su conexión en la ficha del proyecto."
+      >
+        <div className="flex flex-col gap-3">
+          <Grid cols={3} gap={15}>
+            <FormField label="Clave" hint="Minúsculas, números y guiones" required>
+              <TextInput mono value={nc.key} placeholder="jira-cliente-x" onChange={(v) => setNc({ ...nc, key: v.toLowerCase() })} />
+            </FormField>
+            <FormField label="Nombre" required>
+              <TextInput value={nc.name} placeholder="Jira de Cliente X" onChange={(v) => setNc({ ...nc, name: v })} />
+            </FormField>
+            <FormField label="Archivo de credenciales" hint="Dentro de MCP/ (ignorado por git), terminado en .env">
+              <TextInput mono value={envFile} onChange={(v) => setNc({ ...nc, envFile: v })} />
+            </FormField>
+          </Grid>
+          <p className="fk-text fk-text--sm fk-text--muted">
+            La plataforma solo guarda la ruta del archivo, nunca las credenciales. Para crearlo desde la plantilla:{' '}
+            <span className="fk-mono">powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -EnvFile {envFile.replace(/\//g, '\\')}</span> y completá JIRA_URL, JIRA_USERNAME y JIRA_API_TOKEN. Después usá «Diagnosticar». La escritura arranca deshabilitada.
+          </p>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              icon="plus"
+              loading={busy === 'new-connection'}
+              disabled={!/^[a-z][a-z0-9-]{1,39}$/.test(nc.key) || nc.name.trim().length < 2}
+              onClick={() =>
+                run('new-connection', async () => {
+                  await api.post('/connections', { key: nc.key, name: nc.name.trim(), envFile });
+                  setNc({ key: '', name: '', envFile: '' });
+                  await reload();
+                }, 'Conexión creada')
+              }
+            >
+              Crear conexión
+            </Button>
+          </div>
+        </div>
+      </Card>
       {data.map((c) => {
         const caps = c.capabilities as any;
         return (
@@ -106,7 +147,7 @@ function ConnectionsTab() {
                   { label: 'Herramientas', value: caps?.toolCount ?? '—' },
                   { label: 'Comando', value: <span className="fk-mono" style={{ fontSize: 12 }}>{(c.config as any).command}</span>, span: 2 },
                   { label: 'Último diagnóstico', value: fmtDateTime(c.lastCheckedAt) },
-                  { label: 'Argumentos', value: <span className="fk-mono" style={{ fontSize: 12 }}>{((c.config as any).args ?? []).join(' ')}</span>, span: 2 },
+                  { label: 'Archivo de credenciales', value: <span className="fk-mono" style={{ fontSize: 12 }}>{((c.config as any).args ?? [])[((c.config as any).args ?? []).indexOf('--env-file') + 1] ?? '—'}</span>, span: 2 },
                   { label: 'Proyectos', value: c.projects.map((p: any) => p.key).join(', ') || '—' },
                 ]}
               />

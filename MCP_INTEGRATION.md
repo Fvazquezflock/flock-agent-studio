@@ -1,8 +1,28 @@
 # Integración MCP con Jira
 
+## Instalación (2026-10-09) — Implementado
+
+`MCP/mcp-atlassian` **no se versiona** en este repo: es el proyecto público [sooperset/mcp-atlassian](https://github.com/sooperset/mcp-atlassian) (licencia MIT), contiene el `.env` con las credenciales y un entorno Python pesado. Para que quien clone el repo lo pueda usar está `scripts/setup-mcp.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 [-Ref ec54351] [-Dir MCP\mcp-atlassian] [-Force]
+```
+
+- **Requisitos**: git y `uv` (recomendado: instala Python solo; `winget install astral-sh.uv`; el entorno queda con Python 3.12) o un Python 3.10+ real (el script ignora el acceso directo de Microsoft Store).
+- **Qué hace**: crea `MCP\mcp-atlassian\.venv` e instala `mcp-atlassian` desde GitHub fijado en el commit verificado `ec54351` (63 herramientas, incluidas las de transición). Si el ejecutable ya existe no reinstala, salvo con `-Force`.
+- **Credenciales**: si no existe, crea `MCP\mcp-atlassian\.env` desde la plantilla versionada `scripts\mcp-atlassian.env.example` (`JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`; el token se genera en https://id.atlassian.com/manage-profile/security/api-tokens). **Nunca pisa un `.env` existente** ni muestra su contenido.
+- **Verificado**: instalación nueva en una carpeta temporal → 63 herramientas, igual que la instalación existente.
+- **Después**: completar el `.env`, iniciar la plataforma y correr `pnpm mao doctor --mcp` (CONNECTED, 63 herramientas). El diagnóstico actualiza el estado de la conexión `jira-mcp` aunque el seed la haya registrado como no configurada (por haber corrido antes de instalar el servidor).
+
+La conexión `jira-mcp` que registra el seed ejecuta `MCP/mcp-atlassian/.venv/Scripts/mcp-atlassian.exe --env-file MCP/mcp-atlassian/.env` (rutas relativas a la raíz del repo; se cambian con `MAO_JIRA_MCP_COMMAND` y `MAO_JIRA_MCP_ARGS` antes del seed).
+
+## Varias conexiones Jira (2026-10-09) — Implementado
+
+Cada fila de `Connection` apunta al mismo ejecutable con su propio `--env-file` (otro dominio, otra cuenta). Alta y edición desde *Conexiones MCP → Nueva conexión Jira* o `POST/PATCH /api/connections`; el archivo se valida dentro de `MCP/` y con extensión `.env` (`normalizeEnvFile`), y `scripts/setup-mcp.ps1 -EnvFile <ruta>` lo crea desde la plantilla sin reinstalar el servidor. Los gateways se cachean por conexión y se recrean si cambia su configuración; cada proyecto usa la conexión que tenga asignada. Pendiente: credenciales por usuario de la plataforma (relevamiento de usuarios y roles).
+
 ## Hallazgos (Fase 0, 2026-10-09)
 
-- Servidor: `MCP/mcp-atlassian` (sooperset/mcp-atlassian, FastMCP 3.4.4, Python 3.14 en `.venv`), commit `ec54351`.
+- Servidor: `MCP/mcp-atlassian` (sooperset/mcp-atlassian, FastMCP 3.4.4, Python 3.14 en `.venv`), commit `ec54351`. No se versiona en este repo (ver *Instalación*).
 - Transporte: **stdio**. En Claude Code estaba registrado solo para otra carpeta (`Documents/mcp-atlassian`) como `uv run --project … mcp-atlassian --env-file …\.env`. No se modificó esa configuración.
 - Credenciales: `MCP/mcp-atlassian/.env` define `JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`. La plataforma **no lee** ese archivo: lo pasa con `--env-file` al proceso del servidor.
 - Herramientas: 63 (Jira), 0 recursos, 0 prompts. Con `READ_ONLY_MODE=true` quedan 38 (sin escrituras).

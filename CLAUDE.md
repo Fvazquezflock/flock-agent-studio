@@ -16,7 +16,7 @@ Instrucciones para sesiones de Claude Code que **desarrollan** este repositorio.
 - `packages/core` — dominio: catálogo versionado, motor de ejecución, aprobaciones, políticas, publicación, proveedores de IA, cliente MCP, supervisor, propuestas, seed.
 - `apps/api` (Fastify), `apps/worker`, `apps/cli` (`pnpm mao`), `apps/web` (Next.js 15 + Tailwind + design system Flock IT).
 - `design-system/` — sistema de diseño Flock IT (fuente: `tokens.json`; `pnpm tokens` regenera `apps/web/styles`).
-- `MCP/mcp-atlassian` — servidor MCP de Jira existente (repo aparte, con secretos en `.env`). **No modificar ni commitear.**
+- `MCP/mcp-atlassian` — servidor MCP de Jira (proyecto público sooperset/mcp-atlassian, MIT; repo aparte, con secretos en `.env`). No se versiona en este repo: se instala con `scripts/setup-mcp.ps1` (fijado en el commit `ec54351`; plantilla de credenciales en `scripts/mcp-atlassian.env.example`). **No modificar ni commitear.**
 
 ## Comandos
 
@@ -41,6 +41,7 @@ pnpm typecheck
 - Fechas en SQL crudo: comparar contra `now() AT TIME ZONE 'UTC'` (Prisma guarda timestamps UTC sin zona).
 - En Windows PowerShell 5.1 no edites archivos UTF-8 con `Get-Content`/`Set-Content` (rompe acentos): usá el editor o scripts Node.
 - Las pruebas de integración usan la base `mao_test` local (se recrea en cada corrida) y un Jira simulado; nunca escriben en Jira real ni en la base de Railway.
+- El seed (`pnpm db:seed`) no crea el proyecto `DEMO` ni el proveedor simulado salvo con `MAO_SEED_DEMO=true`; vitest lo fija para las pruebas de integración, que siguen usando `DEMO` y el proveedor simulado.
 - Cambios de esquema con la base en Railway: no corras `pnpm db:migrate:dev` contra Railway (si detecta drift ofrece **resetear la base** y borraría los datos). Generá la migración contra la base local (restaurá temporalmente la `DATABASE_URL` local comentada en `.env`), volvé a Railway y aplicala con `pnpm db:migrate` (`migrate deploy`, no destructivo).
 
 ## Documentación a mantener

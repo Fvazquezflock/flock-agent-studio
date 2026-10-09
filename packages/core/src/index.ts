@@ -17,6 +17,7 @@ export type { IModelProvider, ModelInvocation, ModelResult, ProviderDiagnosis } 
 export { DemoJiraGateway } from './jira/demo-gateway';
 export { McpJiraGateway, parseMcpIssue, mcpLinkArgs } from './jira/mcp-gateway';
 export { buildBacklogJql, backlogSearchText, BACKLOG_LIMIT } from './jira/backlog-service';
+export { normalizeEnvFile } from './jira/connection-service';
 export { McpStdioClient, resolveStdioConfig } from './mcp/mcp-client';
 export { computeCapabilities, TOOL_CANDIDATES, FORBIDDEN_TOOLS } from './mcp/capability-map';
 export type { IJiraGateway, JiraIssue, CapabilityEntry } from './jira/types';

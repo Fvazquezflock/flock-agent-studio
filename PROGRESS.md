@@ -1,7 +1,7 @@
 # PROGRESS — Multi-Agent Orchestration Studio
 
 Documento de traspaso. Si retomás el trabajo (otra persona, otra PC u otra sesión de Claude Code), empezá por acá.
-Última actualización: 2026-10-09 — MVP completo y verificado (fases 0 a 6). Base de trabajo migrada a PostgreSQL en Railway.
+Última actualización: 2026-10-09 — MVP completo y verificado (fases 0 a 6). Base de trabajo en PostgreSQL de Railway, reiniciada para la demo. Datos demo opcionales (`MAO_SEED_DEMO`) e instalador del servidor MCP de Jira (`scripts/setup-mcp.ps1`).
 
 ## Estado por fase
 
@@ -15,12 +15,31 @@ Documento de traspaso. Si retomás el trabajo (otra persona, otra PC u otra sesi
 | 5 — Autoevolución supervisada | Implementado | Supervisor → CapabilityDesigner → propuesta → aprobación → versión aprobada → activación aprobada |
 | 6 — Verificación final | Implementado | 63 pruebas, typecheck, build, CLI/UI, MCP en vivo, permisos |
 | 7 — Base en Railway | Implementado | `DATABASE_URL` remota con TLS, datos locales copiados, flujo A verificado contra Railway |
-| 8 — Primera corrida sobre Jira real | Parcial | Épica `SCRUM-5` + HU `SCRUM-6..10` creadas; flujos A y B corridos con modelo simulado; bug de dirección de vínculos corregido. Falta corrida con modelo real (ya disponible) |
+| 8 — Primera corrida sobre Jira real | Parcial | Épica `SCRUM-5` + HU `SCRUM-6..10` creadas; flujos A y B corridos con modelo simulado; bug de dirección de vínculos corregido. Después, flujo A con modelo real (EX-13, borrada en el reinicio para demo); faltan más corridas con modelo real y las escrituras (bloqueadas) |
 | 9 — Backlog de Jira | Implementado | Listar épicas e HU para elegir qué analizar: UI `/backlog`, API y `pnpm mao backlog` |
 | 10 — Menú de operación / configuración | Implementado | Operación arriba; todo lo demás en el grupo desplegable *Configuración* del pie (patrón de ítem anidado del `Sidebar` del design system) |
 | 11 — Consumo de tokens | Implementado | Registro por invocación (con caché y respuestas fuera de contrato), por agente/ejecución/general en UI, API y CLI |
 | 12 — Propuestas: "confirmo y se configura sola" | Implementado | Plan crear → activar → asignar al proyecto de origen; una confirmación registra la aprobación individual de cada paso; "Regenerar diseño" |
 | 13 — Acción y motivo; cancelar por transición | Implementado | Cada ítem de aprobación y cada propuesta indica Crear/Modificar/Cancelar y por qué (con evidencia e inconsistencias); cancelar una HU es una transición real en Jira (`TRANSITION_ISSUE`, siempre aprobación individual). `SCRUM` no tiene estado de cancelación; la CLI todavía no muestra acción ni motivo |
+| 14 — Instalador del servidor MCP de Jira | Implementado | `scripts/setup-mcp.ps1` instala `mcp-atlassian` fijado en `ec54351` y crea el `.env` desde una plantilla; verificado con una instalación nueva (63 herramientas) |
+| 15 — Datos demo opcionales y reinicio para demo | Implementado | El seed solo crea `DEMO` y el proveedor simulado con `MAO_SEED_DEMO=true`; base de Railway reiniciada (se conservan catálogo, `SCRUM`, políticas, conexión y proveedores reales); CP-1 a CP-4 aplicadas |
+
+## Varias conexiones Jira (2026-10-09) — Implementado
+
+Mismo servidor MCP, distintos sitios de Jira y cuentas (dominio, mail y token propios): cada conexión referencia su archivo de credenciales dentro de `MCP/`. Alta/edición en *Conexiones MCP → Nueva conexión Jira* y `POST/PATCH /api/connections` (`ConnectionService.create/update`, `normalizeEnvFile`: solo rutas relativas dentro de `MCP/` terminadas en `.env`; ejecutable fijo; escritura deshabilitada al crear). `scripts/setup-mcp.ps1 -EnvFile` crea el archivo desde la plantilla. Pruebas: alta, normalización de rutas de Windows, conflicto de clave, edición y rechazo de rutas inválidas (91 en total). Pendiente: credenciales por usuario de la plataforma.
+
+## Reinicio para demo (2026-10-09) — Implementado
+
+- **Datos demo opcionales**: `pnpm db:seed` ya **no** crea por defecto el proyecto `DEMO` ni el proveedor simulado; solo con `MAO_SEED_DEMO=true` (documentado en `.env.example`). Sin demo, el proveedor por defecto es Claude Code local (`claude-local`). Las pruebas de integración siguen usando `DEMO` y el proveedor simulado (vitest fija `MAO_SEED_DEMO=true`).
+- **Propuestas aplicadas antes del reinicio**: CP-1 `OracleSQLValidation` (creada y activa; estaba asignada a `DEMO`, que se borró, así que hoy no está en las skills de ningún proyecto). CP-2 `RegulatoryComplianceAR`, CP-3 `AccessibilityWCAG` y CP-4 `IntegrationResiliencePatterns`: diseño regenerado con Claude Code y luego creadas, activadas y agregadas a las skills de `SCRUM`.
+- **Reinicio de la base de trabajo (Railway)**: se borraron ejecuciones, aprobaciones, operaciones, snapshots, consumo de tokens, propuestas y auditoría (la numeración vuelve a empezar en EX-1, AP-1 y CP-1), el proyecto `DEMO` y el proveedor simulado. Se conservaron el catálogo (9 agentes, 10 skills, 2 orquestadores), el proyecto `SCRUM` (Jira registrado vía MCP) con su configuración, las políticas, la conexión `jira-mcp` y los proveedores reales (Claude Code por CLI, por defecto, y API de Anthropic).
+- **Respaldo previo** en `.data/backups/` (ignorado por git).
+- Las referencias a EX-1…EX-13, AP-1…AP-14 y CP-1…CP-4 en las secciones siguientes (más antiguas) son históricas: esas filas ya no están en la base de trabajo y los números nuevos no se corresponden con ellas (las skills creadas por CP-1 a CP-4 sí siguen en el catálogo).
+
+## Instalador del servidor MCP de Jira (2026-10-09) — Implementado
+
+- `MCP/mcp-atlassian` sigue sin versionarse (proyecto público sooperset/mcp-atlassian, MIT; contiene el `.env` con credenciales y un entorno Python pesado). Se agregó `scripts/setup-mcp.ps1` (`[-Ref ec54351] [-Dir MCP\mcp-atlassian] [-Force]`): requiere git y `uv` (o Python 3.10+ real), crea `MCP\mcp-atlassian\.venv`, instala `mcp-atlassian` desde GitHub fijado en `ec54351` y, si no existe, crea el `.env` desde `scripts\mcp-atlassian.env.example` (nunca pisa uno existente).
+- Verificado: instalación nueva en una carpeta temporal → 63 herramientas, igual que la instalación existente. Detalle en MCP_INTEGRATION.md → *Instalación*.
 
 ## Acción y motivo en cada propuesta; cancelar HU por transición (2026-10-09) — Implementado
 
@@ -34,7 +53,7 @@ Migración `20261009185956_action_rationale` **aplicada en Railway** (`migrate d
 - **MCP**: `jira_get_transitions` (lectura, `GetTransitions`) y `jira_transition_issue` (escritura, `TransitionIssue`) en el mapa de capacidades y en el proceso de escritura restringido. Verificado en el Jira de prueba: `SCRUM` **no tiene estado de cancelación** (transiciones: Idea, Por hacer, En curso, Testing y Listo).
 - **Propuestas de capacidades con acción y evidencia**: columnas `CapabilityProposal.action` (`CREATE | UPDATE | CANCEL`, por defecto `CREATE`) y `CapabilityProposal.evidence` (`String[]`); contrato `capabilityGap.action` y `capabilityGap.evidence`. Plan para UPDATE (la capacidad existe): crear nueva versión + activar (+ asignar al proyecto de origen si la skill no estaba). Plan para CANCEL: quitar la skill de las skills del proyecto de origen (`MODIFY_AGENT_CONFIG`) + desactivarla en el catálogo (operación de activación del tipo). La verificación exige que la capacidad exista para UPDATE/CANCEL; el supervisor principal no se puede cancelar. UI: columna *Acción* en el listado de propuestas; en el detalle, insignia de acción y tarjeta *Qué propone y por qué* (problema, justificación, inconsistencias o brechas encontradas).
 - **Pruebas** (89 en total, todas pasan): nuevo `packages/core/test/integration/actions.test.ts` (motivo en flujo B con inconsistencias, motivo en flujo A, cancelación por transición contra el Jira simulado en modo real con comentario y estado "Cancelada", y sin transición mapeada no se cancela) y 3 casos en `proposals.test.ts` (modificar, cancelar y no se puede modificar ni cancelar algo inexistente).
-- **Pendiente**: la CLI (`pnpm mao approval`) todavía no muestra acción ni motivo; el modelo simulado no genera recomendaciones de cancelar por sí solo (solo el modelo real o las pruebas); para ejecutar cancelaciones en `SCRUM` hay que agregar un estado "Cancelada" al flujo de Jira (o mapear uno existente); CP-2 a CP-4 siguen necesitando *Regenerar diseño*.
+- **Pendiente**: la CLI (`pnpm mao approval`) todavía no muestra acción ni motivo; el modelo simulado no genera recomendaciones de cancelar por sí solo (solo el modelo real o las pruebas); para ejecutar cancelaciones en `SCRUM` hay que agregar un estado "Cancelada" al flujo de Jira (o mapear uno existente); CP-2 a CP-4 siguen necesitando *Regenerar diseño* (resuelto después: ver *Reinicio para demo*).
 
 ## Consumo de tokens (2026-10-09) — Implementado
 
@@ -56,12 +75,12 @@ Migración `20261009185956_action_rationale` **aplicada en Railway** (`migrate d
 - **Enviar a aprobación** crea una única solicitud con los pasos como ítems dependientes (rechazo en cascada). **Confirmar e implementar** (`POST /api/proposals/:id/implement` con el hash del plan) registra una decisión individual por paso (se respeta `ALWAYS_APPROVE` y el piso `HARD_FLOOR`: no se relajó ninguna política) y, al decidirse el último, `applyDecidedPlan` aplica todo en la misma transacción; la propuesta queda `APPLIED` (o `APPROVED` si se rechazó algún paso). Si había una solicitud del formato anterior (un solo paso, como AP-12 de CP-1), se reemplaza (`SUPERSEDED`).
 - **Regenerar diseño** (`POST /api/proposals/:id/redesign`): CapabilityDesigner vuelve a diseñar la definición de un borrador a partir del problema y la solución, con el proveedor de la ejecución de origen (consumo registrado con origen `PROPOSAL_REDESIGN`). Solo se toma la definición: tipo, clave, herramientas y permisos no los cambia el modelo.
 - **UI**: plan con estado de cada paso, enlace a la solicitud abierta, confirmación con el hash, "Regenerar diseño" cuando la verificación falla.
-- **Pendiente para el usuario**: CP-1 (demo) lista para "Confirmar e implementar"; CP-2 a CP-4 (SCRUM) necesitan "Regenerar diseño" (consume tokens del modelo real) antes de implementarse.
+- **Pendiente para el usuario**: CP-1 (demo) lista para "Confirmar e implementar"; CP-2 a CP-4 (SCRUM) necesitan "Regenerar diseño" (consume tokens del modelo real) antes de implementarse. (Hecho el 2026-10-09: las cuatro quedaron aplicadas; ver *Reinicio para demo*.)
 - Pruebas: plan de 3 pasos, hash inválido no aplica nada, una decisión por paso, aprobación parcial, reemplazo de la solicitud anterior y regenerar diseño (82 en total). Se corrigieron dos dependencias de orden entre archivos de prueba (flujo A ↔ propuestas).
 
 ## Regresión corregida: objetos de forma libre en salidas estructuradas (2026-10-09)
 
-El adaptador `toStructuredSchema` (agregado para EX-13) forzaba `additionalProperties: false` también en los `z.record`: la `definition` de las propuestas y el `input` del plan del supervisor solo podían valer `{}`. Por eso **CP-2, CP-3 y CP-4** (generadas por EX-13 con modelo real) quedaron con definición vacía y "Con errores". Ahora esos campos se piden como texto JSON (con la forma esperada en la descripción) y `reviveStructuredOutput` los vuelve objeto antes de validar el contrato. Verificado con una invocación real (haiku): la definición de skill llega, cumple el contrato y pasa `skillDefinitionSchema`. Pruebas: ningún objeto cerrado sin propiedades en los contratos y ida y vuelta de la definición. CP-2 a CP-4 siguen en DRAFT con definición vacía (hay que regenerarlas o completarlas).
+El adaptador `toStructuredSchema` (agregado para EX-13) forzaba `additionalProperties: false` también en los `z.record`: la `definition` de las propuestas y el `input` del plan del supervisor solo podían valer `{}`. Por eso **CP-2, CP-3 y CP-4** (generadas por EX-13 con modelo real) quedaron con definición vacía y "Con errores". Ahora esos campos se piden como texto JSON (con la forma esperada en la descripción) y `reviveStructuredOutput` los vuelve objeto antes de validar el contrato. Verificado con una invocación real (haiku): la definición de skill llega, cumple el contrato y pasa `skillDefinitionSchema`. Pruebas: ningún objeto cerrado sin propiedades en los contratos y ida y vuelta de la definición. CP-2 a CP-4 siguen en DRAFT con definición vacía (hay que regenerarlas o completarlas; regeneradas y aplicadas después, ver *Reinicio para demo*).
 
 ## Navegación (2026-10-09) — Implementado
 
@@ -113,15 +132,17 @@ Para elegir qué analizar sin escribir claves a mano: pantalla **Backlog de Jira
 | Próximos pasos | [ROADMAP.md](ROADMAP.md) |
 | Design system (Flock IT) | [design-system/README.md](design-system/README.md) |
 
-Resumen en tres líneas: el MVP funciona de punta a punta con un **modelo simulado** (heurísticas determinísticas, siempre marcado como simulación) y datos demo; la **lectura de Jira real** está verificada contra el sitio de prueba (proyecto `SCRUM`); faltan **credenciales de modelo real** y un **entorno de Jira autorizado** para habilitar escrituras (hoy bloqueadas a propósito).
+Resumen en tres líneas: el MVP funciona de punta a punta contra el **Jira de prueba** (proyecto `SCRUM`, solo lectura) con **Claude Code local** como modelo real (proveedor por defecto); el **modelo simulado** y el proyecto `DEMO` quedan para las pruebas y para demos opcionales (`MAO_SEED_DEMO=true`); falta un **entorno de Jira autorizado** para habilitar escrituras (hoy bloqueadas a propósito).
 
-Prueba rápida de los dos flujos (con los servicios arriba):
+Prueba rápida de los dos flujos (con los servicios arriba y el MCP diagnosticado):
 
-- UI http://127.0.0.1:3000 → *Nueva ejecución* → proyecto `DEMO` → épica `DEMO-100` (flujo A) o historia `DEMO-102` (flujo B) → aprobar en *Aprobaciones*.
-- Terminal o Claude Code: `pnpm mao ask "Analizá la épica DEMO-100 y proponé historias y tareas técnicas." --wait`, luego `pnpm mao approval 1` y `pnpm mao approve 1 --batch --confirm <hash>`.
+- UI http://127.0.0.1:3000 → *Backlog de Jira* → proyecto `SCRUM` → épica `SCRUM-5` → *Analizar épica* (flujo A) o *Validar HU* sobre una de sus historias (flujo B) con *Claude Code local* → revisar en *Aprobaciones* (la publicación queda bloqueada mientras la escritura esté deshabilitada).
+- Terminal o Claude Code: `pnpm mao ask "Analizá la épica SCRUM-5 y proponé historias y tareas técnicas." --project SCRUM --wait`, luego `pnpm mao approval 1`.
+- Con datos demo (`MAO_SEED_DEMO=true` + `pnpm db:seed`): proyecto `DEMO`, épica `DEMO-100` (flujo A) o historia `DEMO-102` (flujo B), proveedor simulado, publicación simulada.
 
 Para activar lo real:
 
+0. MCP de Jira: `powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1` y completar `MCP/mcp-atlassian/.env` (ver MCP_INTEGRATION.md → *Instalación*).
 1. Modelo: `claude auth login` (runner local) o `ANTHROPIC_API_KEY` en `.env`; elegir el proveedor en *Configuración → Ajustes generales → Proveedores de IA*. El proveedor por API trae activado por defecto el *fallback* del lado del servidor ante rechazos del modelo (se puede quitar en `packages/core/src/providers/anthropic-api.ts`).
 2. Jira corporativo: cambiar `JIRA_URL/USERNAME/API_TOKEN` en `MCP/mcp-atlassian/.env`, crear el proyecto en modo *Jira real* con la conexión `jira-mcp`, *Descubrir tipos y campos* y mapear los tipos.
 3. Escrituras: solo en un Jira de prueba autorizado → `MAO_ALLOW_JIRA_WRITES=true`, reiniciar API y worker, habilitar la escritura en *Configuración → Ajustes generales → Conexiones MCP* (pide escribir `HABILITAR ESCRITURA`) y verificar parent de subtareas y dirección de vínculos (ver MCP_INTEGRATION.md).
@@ -138,11 +159,11 @@ Para activar lo real:
 
 ## Cómo retomar en otra PC
 
-1. Copiá la carpeta (o clonala si la subiste a un remoto: el repo git está inicializado **sin commits**; no incluye `.env`, `MCP/` ni `.data/`).
-2. Copiá aparte, si corresponde, `MCP/mcp-atlassian` con su `.env` (repo independiente con secretos).
+1. Cloná el repositorio (o copiá la carpeta). No incluye `.env`, `MCP/` ni `.data/`.
+2. Instalá el servidor MCP de Jira con `powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1` (requiere git y `uv`, `winget install astral-sh.uv`, o Python 3.10+) y completá `JIRA_URL`, `JIRA_USERNAME` y `JIRA_API_TOKEN` en `MCP\mcp-atlassian\.env`, que el script crea desde la plantilla si no existe. Ya no hace falta copiar `MCP/` aparte (ver MCP_INTEGRATION.md → *Instalación*).
 3. Para compartir la base de Railway: copiá `.env.example` a `.env` y poné en `DATABASE_URL` la URL de Railway (ver README → *Base de datos en Railway*) **antes** del paso siguiente. Los datos ya están en Railway: no hace falta copiarlos.
-4. `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (genera el token si falta, Postgres embebido para las pruebas, migraciones y seed idempotente sobre `DATABASE_URL`).
-5. `powershell -ExecutionPolicy Bypass -File scripts\start.ps1` → http://127.0.0.1:3000 (con base remota no inicia el Postgres embebido).
+4. `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1` (genera el token si falta, Postgres embebido para las pruebas, migraciones y seed idempotente sobre `DATABASE_URL`; sin datos demo salvo `MAO_SEED_DEMO=true`).
+5. `powershell -ExecutionPolicy Bypass -File scripts\start.ps1` → http://127.0.0.1:3000 (con base remota no inicia el Postgres embebido) y `pnpm mao doctor --mcp` (MCP CONNECTED con 63 herramientas).
 6. `pnpm db:start` y `pnpm test` para confirmar el entorno.
 
 ## Verificado (2026-10-09)
@@ -156,6 +177,7 @@ Para activar lo real:
 - Jira real (`SCRUM`, sitio de prueba): descubrimiento (7 tipos, 56 campos, 4 vínculos), lectura de `SCRUM-1`, flujo B completo; publicación **bloqueada** (0 escrituras) por no estar habilitada.
 - Con la base en Railway: `pnpm test` **65 pruebas** (2 nuevas de `describeDatabaseUrl`), `pnpm typecheck`, `pnpm mao doctor` (trabajo: Railway con TLS; pruebas: local), servicios reiniciados con `start.ps1 -Background`, flujo A `EX-7` desde Claude Code → aprobación en lote `AP-7` (29 ítems) por CLI → publicación simulada `COMPLETED`; la UI muestra "PostgreSQL remoto con TLS".
 - Con acción y motivo y la cancelación por transición: `pnpm test` **89 pruebas**, todas pasan (incluida la cancelación contra el Jira simulado en modo real). Transiciones de `SCRUM` leídas con el MCP: no hay estado de cancelación.
+- Instalador del MCP: `scripts\setup-mcp.ps1` en una carpeta temporal → instalación nueva con 63 herramientas, igual que la existente.
 
 ## Bugs encontrados y corregidos durante la verificación
 
@@ -168,14 +190,15 @@ Para activar lo real:
 
 ## Pendiente / bloqueado
 
-- **Pendiente (antes bloqueado)**: modelo real. Desde 2026-10-09 `claude auth status` → sesión iniciada y `claude-local` diagnostica AVAILABLE; falta la primera corrida con él (elegirlo en *Configuración → Ajustes generales → Proveedores* o por proyecto). `ANTHROPIC_API_KEY` sigue vacío.
+- **Parcial (antes bloqueado)**: modelo real. `claude-local` verificado (flujo A sobre `SCRUM-5`, regeneración del diseño de CP-2 a CP-4) y es el proveedor por defecto sin datos demo; faltan más corridas para calibrar prompts y presupuestos, y probar la API de Anthropic (`ANTHROPIC_API_KEY`).
 - **Bloqueado (autorización)**: escrituras reales en Jira. Implementadas y probadas contra un Jira simulado; requieren un entorno de prueba autorizado, `MAO_ALLOW_JIRA_WRITES=true` y habilitar la conexión. Verificar parent y dirección de vínculos (ver MCP_INTEGRATION.md).
 - **Pendiente**: `MAART-1052` del enunciado no existe en el Jira conectado (solo hay `SCRUM`); conectar el Jira corporativo cambiando el `.env` del MCP.
 - **Pendiente**: mapeo de campos personalizados en la publicación (story points, sprint); editor visual drag-and-drop; usuarios/roles; pruebas E2E de UI con Playwright. Ver ROADMAP.md.
 - **Pendiente**: la CLI (`pnpm mao approval`) no muestra la acción (Crear/Modificar/Cancelar) ni el motivo de cada ítem; hoy solo la UI.
 - **Pendiente**: el modelo simulado no propone cancelar historias por sí solo (solo el modelo real o las pruebas).
 - **Pendiente (Jira)**: `SCRUM` no tiene estado de cancelación (Idea, Por hacer, En curso, Testing, Listo). Para ejecutar cancelaciones hay que agregar un estado "Cancelada" al flujo de Jira o mapear uno existente en *Transición para cancelar historias*.
-- **Pendiente para el usuario**: CP-2 a CP-4 necesitan *Regenerar diseño* antes de implementarse.
+- **Pendiente (opcional)**: la skill `OracleSQLValidation` (CP-1) quedó activa en el catálogo pero no está en las skills de ningún proyecto (estaba asignada a `DEMO`, que se borró); agregarla a `SCRUM` si hace falta.
+- **Pendiente (documentación)**: `.claude/skills/mao-platform/SKILL.md` todavía usa ejemplos con `DEMO-100`/`DEMO-102`, que no existen en la base de trabajo sin datos demo.
 - **Parcial**: `claude doctor` no se puede automatizar (TUI interactiva); el diagnóstico propio cubre Node, pnpm, Docker, PostgreSQL, Claude Code, MCP y proveedores.
 
 ## Hallazgos del entorno (Fase 0)
@@ -191,7 +214,9 @@ Para activar lo real:
 
 ## Datos útiles
 
-- Proyecto demo `DEMO`: épica `DEMO-100`, HU `DEMO-101/102/103` (103 contiene un intento de inyección para la demo), subtareas `DEMO-110/111/112`.
+- Proyecto demo `DEMO` (solo con `MAO_SEED_DEMO=true` y en las pruebas; ya no está en la base de Railway): épica `DEMO-100`, HU `DEMO-101/102/103` (103 contiene un intento de inyección para la demo), subtareas `DEMO-110/111/112`.
+- Proyecto real `SCRUM` (Jira de prueba vía MCP): épica `SCRUM-5` con las HU `SCRUM-6..10` (detalle en MCP_INTEGRATION.md).
+- Respaldo de la base de trabajo previo al reinicio para demo: `.data/backups/` (ignorado por git).
 - Token del propietario: `MAO_OWNER_TOKEN` en `.env` (lo usan la CLI y el proxy de la UI; el navegador nunca lo recibe).
 - Scripts de verificación real: `scripts/verify-jira-read.mjs`, `scripts/verify-live-flow.mjs`.
 - Prueba de humo del motor sin servicios: `node --import tsx packages/core/scripts/smoke.ts EPIC|STORY`.

@@ -1,12 +1,27 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import type { Connection, Project } from '@mao/db';
 import type { Core } from '../core';
 import type { Actor } from '../context';
 import { McpStdioClient, resolveStdioConfig, type McpStdioConfig } from '../mcp/mcp-client';
 import { FORBIDDEN_TOOLS, computeCapabilities } from '../mcp/capability-map';
-import { PlatformError, notFound, toPlatformError } from '../util/errors';
+import { PlatformError, invalid, notFound, toPlatformError } from '../util/errors';
 import { DemoJiraGateway } from './demo-gateway';
 import { McpJiraGateway } from './mcp-gateway';
 import type { IJiraGateway } from './types';
+
+/**
+ * Ruta del archivo de credenciales de una conexión: relativa al repo, dentro de MCP/ (ignorado por git) y
+ * terminada en .env. Evita rutas arbitrarias del disco y cualquier cosa que no sea un archivo de entorno.
+ */
+export function normalizeEnvFile(input: string): string {
+  const p = input.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  if (path.isAbsolute(p) || /^[a-zA-Z]:/.test(p)) throw invalid('El archivo de credenciales debe ser una ruta relativa dentro de MCP/');
+  if (p.split('/').some((seg) => seg === '..' || seg === '')) throw invalid('Ruta de credenciales inválida');
+  if (!/^MCP\/[A-Za-z0-9._\/-]+$/.test(p)) throw invalid('El archivo de credenciales debe estar dentro de MCP/ (carpeta ignorada por git)');
+  if (!p.endsWith('.env')) throw invalid('El archivo de credenciales debe terminar en .env');
+  return p;
+}
 
 /** Conexiones MCP: diagnóstico, mapa de capacidades y fábrica de gateways (con caché por conexión). */
 export class ConnectionService {
@@ -20,6 +35,41 @@ export class ConnectionService {
 
   list() {
     return this.prisma.connection.findMany({ orderBy: { key: 'asc' }, include: { projects: { select: { key: true, name: true } } } });
+  }
+
+  /** Configuración stdio: siempre el ejecutable del servidor MCP configurado; solo cambia el archivo de credenciales. */
+  private stdioConfig(envFile: string): McpStdioConfig {
+    return { transport: 'stdio', command: process.env.MAO_JIRA_MCP_COMMAND || 'MCP/mcp-atlassian/.venv/Scripts/mcp-atlassian.exe', args: ['--env-file', envFile] };
+  }
+
+  private fileState(envFile: string) {
+    const found = existsSync(path.resolve(this.core.deps.repoRoot, envFile));
+    return { status: found ? 'UNKNOWN' : 'NOT_CONFIGURED', lastError: found ? null : `Falta el archivo de credenciales ${envFile} (scripts\\setup-mcp.ps1 -EnvFile ${envFile.replace(/^MCP\//, 'MCP\\').replace(/\//g, '\\')})` };
+  }
+
+  /** Nueva conexión Jira (otro sitio/cuenta) con el mismo servidor MCP. Escritura deshabilitada al crearla. */
+  async create(input: { key: string; name: string; envFile: string }, actor: Actor) {
+    if (await this.prisma.connection.findUnique({ where: { key: input.key } })) throw new PlatformError('VERSION_CONFLICT', `Ya existe la conexión ${input.key}`);
+    const envFile = normalizeEnvFile(input.envFile);
+    const c = await this.prisma.connection.create({
+      data: { key: input.key, name: input.name, kind: 'MCP_STDIO', purpose: 'JIRA', config: this.stdioConfig(envFile) as object, writeEnabled: false, ...this.fileState(envFile) },
+    });
+    await this.core.audit.record({ actor, action: 'CONNECTION_CREATED', entityType: 'Connection', entityId: c.key, summary: `Conexión ${c.key} creada (credenciales en ${envFile}, escritura deshabilitada)` });
+    return c;
+  }
+
+  /** Cambia nombre o archivo de credenciales. El gateway en caché se recrea solo (cambia su firma). */
+  async update(key: string, input: { name?: string; envFile?: string }, actor: Actor) {
+    const current = await this.get(key);
+    const data: Record<string, unknown> = {};
+    if (input.name) data.name = input.name;
+    if (input.envFile) {
+      const envFile = normalizeEnvFile(input.envFile);
+      Object.assign(data, { config: { ...(current.config as object), ...this.stdioConfig(envFile) }, capabilities: null, ...this.fileState(envFile) });
+    }
+    const c = await this.prisma.connection.update({ where: { key }, data });
+    await this.core.audit.record({ actor, action: 'CONNECTION_UPDATED', entityType: 'Connection', entityId: key, summary: `Conexión ${key} actualizada${input.envFile ? ` (credenciales en ${normalizeEnvFile(input.envFile)})` : ''}` });
+    return c;
   }
 
   async get(key: string) {

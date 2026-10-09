@@ -1,11 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { connectionCreateRequest, connectionUpdateRequest } from '@mao/shared';
 import { PlatformError, type Core } from '@mao/core';
 import { actorOf, params, parse } from '../http';
 
 /** Conexiones MCP, proveedores de IA, configuración global y exportación. */
 export function registerIntegrationRoutes(app: FastifyInstance, core: Core) {
   app.get('/api/connections', async () => core.connections.list());
+  /** Otra conexión Jira (otro sitio o cuenta) con el mismo servidor MCP: solo se registra la ruta del archivo de credenciales. */
+  app.post('/api/connections', async (req, reply) => reply.code(201).send(await core.connections.create(parse(connectionCreateRequest, req.body), actorOf(core, req))));
+  app.patch('/api/connections/:key', async (req) => core.connections.update(params(req).key, parse(connectionUpdateRequest, req.body), actorOf(core, req)));
   app.get('/api/connections/:key', async (req) => core.connections.get(params(req).key));
   app.post('/api/connections/:key/diagnose', async (req) => core.connections.diagnose(params(req).key, actorOf(core, req)));
 

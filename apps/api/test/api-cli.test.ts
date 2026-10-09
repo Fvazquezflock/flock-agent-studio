@@ -125,3 +125,31 @@ describe('backlog de Jira (solo lectura)', () => {
     expect((await app.inject({ method: 'GET', url: '/api/projects/NOPE/backlog', headers: auth })).statusCode).toBe(404);
   });
 });
+
+describe('varias conexiones Jira (mismo servidor MCP, otras credenciales)', () => {
+  it('crea una conexión que solo referencia su archivo de credenciales dentro de MCP/', async () => {
+    // Se acepta la ruta con barras de Windows y se guarda normalizada.
+    const r = await app.inject({ method: 'POST', url: '/api/connections', headers: auth, payload: { key: 'jira-cliente-x', name: 'Jira de Cliente X', envFile: String.raw`MCP\mcp-atlassian\cliente-x.env` } });
+    expect(r.statusCode).toBe(201);
+    const c = r.json();
+    expect(c.config.args).toEqual(['--env-file', 'MCP/mcp-atlassian/cliente-x.env']);
+    // Mismo ejecutable del servidor MCP que la conexión principal: no se acepta un comando arbitrario.
+    expect(c.config.command).toBe(((await core.connections.get('jira-mcp')).config as { command: string }).command);
+    expect(c.writeEnabled).toBe(false);
+    expect(c.status).toBe('NOT_CONFIGURED');
+    expect(c.lastError).toMatch(/setup-mcp\.ps1 -EnvFile/);
+    expect((await app.inject({ method: 'POST', url: '/api/connections', headers: auth, payload: { key: 'jira-cliente-x', name: 'Otra', envFile: 'MCP/x.env' } })).statusCode).toBe(409);
+
+    // Cambiar el archivo de credenciales (el gateway en caché se recrea porque cambia la configuración).
+    const upd = await app.inject({ method: 'PATCH', url: '/api/connections/jira-cliente-x', headers: auth, payload: { envFile: 'MCP/jira/cliente-x-2.env' } });
+    expect(upd.json().config.args).toEqual(['--env-file', 'MCP/jira/cliente-x-2.env']);
+  });
+
+  it('rechaza rutas fuera de MCP/, absolutas, con .. o que no sean .env', async () => {
+    for (const envFile of [String.raw`C:\secretos\jira.env`, String.raw`MCP\..\..\secretos.env`, '/etc/jira.env', 'MCP/../.env', '.env', 'MCP/mcp-atlassian/config.json', 'apps/api/.env']) {
+      const r = await app.inject({ method: 'POST', url: '/api/connections', headers: auth, payload: { key: 'jira-mala', name: 'Mala', envFile } });
+      expect(r.statusCode, envFile).toBe(400);
+    }
+    expect((await app.inject({ method: 'POST', url: '/api/connections', headers: auth, payload: { key: 'Mayus Culas', name: 'x', envFile: 'MCP/x.env' } })).statusCode).toBe(400);
+  });
+});
