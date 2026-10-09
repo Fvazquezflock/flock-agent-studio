@@ -9,6 +9,10 @@ export { resolvePolicy, checkPolicyChange, DEFAULT_MODES, HARD_FLOOR, STRICTNESS
 export { resolveConfig } from './config/config-service';
 export { validateOrchestratorDefinition, validateAgentDefinition, validateSkillDefinition, topologicalLayers, safetyScan, type CatalogKind } from './catalog/validation';
 export { KIND_META } from './catalog/catalog-service';
+export { CATALOG_KINDS, CatalogFileError, catalogRelPath, definitionHash, normalizeDefinition, parseCatalogFile, renderCatalogFile } from './catalog/file-format';
+export { CatalogFileStore } from './catalog/file-store';
+export type { CatalogFileReport, CatalogFileState, CatalogSyncMode, CatalogSyncOptions } from './catalog/sync-service';
+export type { ConfigFileReport, ConfigFileState, ConfigFileSubject } from './config/config-files';
 export { decisionHash } from './approvals/approval-service';
 export { MockModelProvider } from './providers/mock-provider';
 export { LocalClaudeRunner, extractJson } from './providers/local-claude';

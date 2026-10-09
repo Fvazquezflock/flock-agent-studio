@@ -1,0 +1,192 @@
+# Orquestador del catálogo (flujo declarativo).
+# Editar este archivo crea una versión pendiente de aprobación al sincronizar: nunca se activa sola.
+name: Épica → Historias → Tareas
+objective: Analizar una épica y proponer historias de usuario y tareas técnicas listas para aprobar y publicar.
+description: Lee la épica y su contexto, analiza el alcance, genera historias, las descompone por especialidad en paralelo, valida, planifica dependencias y pide aprobación antes de publicar.
+useConditions:
+  - Hay una épica con alcance descripto y faltan historias o tareas.
+  - Se quiere completar el backlog de una épica existente.
+keywords:
+  - épica
+  - epica
+  - epic
+  - historias
+  - proponé historias
+  - generar historias
+  - tareas técnicas
+  - backlog
+inputSchema:
+  fields:
+    - key: epicKey
+      label: Clave de la épica
+      type: issueKey
+      required: true
+      description: Por ejemplo DEMO-100
+    - key: instructions
+      label: Instrucciones complementarias
+      type: text
+      required: false
+      description: Opcional
+steps:
+  - key: context
+    name: Contexto
+    description: Proyecto, épica, historias y tareas existentes, tipos y vínculos.
+    handler: jira.context
+    agentKey: JiraContextAnalyzer
+    params:
+      mode: epic
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: analysis
+    name: Análisis funcional
+    handler: agent.task
+    agentKey: FunctionalAnalyst
+    task: functional_analysis
+    dependsOn:
+      - context
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: stories
+    name: Generación de historias
+    handler: agent.task
+    agentKey: FunctionalAnalyst
+    skillKeys:
+      - UserStoryWriting
+    task: generate_stories
+    dependsOn:
+      - analysis
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_backend
+    name: Tareas Backend
+    handler: agent.task
+    agentKey: BackendSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - stories
+    params:
+      specialty: BACKEND
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_frontend
+    name: Tareas Frontend
+    handler: agent.task
+    agentKey: FrontendSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - stories
+    params:
+      specialty: FRONTEND
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: tasks_fullstack
+    name: Tareas Fullstack
+    handler: agent.task
+    agentKey: FullstackSpecialist
+    task: technical_breakdown
+    dependsOn:
+      - stories
+    params:
+      specialty: FULLSTACK
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: validation
+    name: Validación QA
+    handler: agent.task
+    agentKey: QAValidator
+    task: validate_plan
+    dependsOn:
+      - tasks_backend
+      - tasks_frontend
+      - tasks_fullstack
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: dependencies
+    name: Dependencias
+    handler: agent.task
+    agentKey: DependencyPlanner
+    task: dependency_plan
+    dependsOn:
+      - validation
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: true
+  - key: review
+    name: Revisión del supervisor
+    handler: supervisor.review
+    agentKey: MainSupervisor
+    dependsOn:
+      - dependencies
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: continue
+    parallelSafe: true
+  - key: approval
+    name: Aprobación
+    handler: approval.gate
+    dependsOn:
+      - review
+    params:
+      builder: epic_publication
+      regenerateFrom:
+        - stories
+    retry:
+      maxAttempts: 1
+      backoffMs: 1000
+    onError: fail
+    parallelSafe: true
+  - key: publish
+    name: Publicación
+    handler: jira.publish
+    dependsOn:
+      - approval
+    retry:
+      maxAttempts: 3
+      backoffMs: 2000
+    onError: fail
+    parallelSafe: false
+approvalConditions:
+  operationTypes:
+    - CREATE_ISSUE
+    - CREATE_ISSUE_LINK
+  notes: Se crean solo los elementos aprobados; las tareas dependen de que su historia se apruebe.
+errorHandling:
+  defaultMaxAttempts: 3
+  backoffMs: 2000
+  notes: Errores transitorios (modelo, MCP, timeout) se reintentan con backoff; errores de validación o autorización detienen el flujo.
+resultSchema:
+  description: Historias, tareas, validación, dependencias y resultado de publicación.
+  fields:
+    - key: stories
+      description: Cantidad de historias propuestas
+    - key: tasks
+      description: Cantidad de tareas propuestas
+    - key: publication
+      description: Operaciones ejecutadas o simuladas
+tags:
+  - jira
+  - historias

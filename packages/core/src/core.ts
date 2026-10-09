@@ -4,7 +4,10 @@ import { ApprovalService } from './approvals/approval-service';
 import { AuditService } from './audit/audit';
 import { CatalogService } from './catalog/catalog-service';
 import { ExportService } from './catalog/export-service';
+import { CatalogFileStore } from './catalog/file-store';
+import { CatalogSyncService } from './catalog/sync-service';
 import { CatalogTestService } from './catalog/test-service';
+import { ConfigFileService } from './config/config-files';
 import { ConfigService } from './config/config-service';
 import { ExecutionEngine } from './engine/engine';
 import { BacklogService } from './jira/backlog-service';
@@ -25,6 +28,10 @@ export class Core {
   readonly catalog: CatalogService;
   readonly catalogTests: CatalogTestService;
   readonly exports: ExportService;
+  /** Archivos de `catalog/` (fuente de verdad versionada de definiciones y configuración). */
+  readonly catalogFiles: CatalogFileStore;
+  readonly catalogSync: CatalogSyncService;
+  readonly configFiles: ConfigFileService;
   readonly approvals: ApprovalService;
   readonly connections: ConnectionService;
   readonly backlog: BacklogService;
@@ -44,6 +51,9 @@ export class Core {
     this.catalog = new CatalogService(this);
     this.catalogTests = new CatalogTestService(this);
     this.exports = new ExportService(this);
+    this.catalogFiles = new CatalogFileStore(this.deps.catalogDir);
+    this.catalogSync = new CatalogSyncService(this);
+    this.configFiles = new ConfigFileService(this);
     this.approvals = new ApprovalService(this);
     this.connections = new ConnectionService(this);
     this.backlog = new BacklogService(this);

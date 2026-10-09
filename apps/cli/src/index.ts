@@ -32,6 +32,12 @@ Uso: pnpm mao <comando> [opciones]
       [--items a,b | --all] [--comment "…"]
   proposals                               Propuestas de capacidades
   usage [EX] [--days N] [--project P]     Consumo de tokens: de una ejecución (por agente) o general (por agente y origen)
+  files                                   Estado de los archivos de catalog/ (definiciones y configuración) frente a la base
+  files sync                              Exporta lo aprobado e importa los archivos cambiados como versiones pendientes de aprobación
+  files export [--sobrescribir]           Escribe los archivos desde la base sin pisar cambios sin importar
+      [--confirmar]                       (--sobrescribir también los reemplaza y exige --confirmar)
+  files apply [--archivo RUTA ...]        Muestra el diff de la configuración editada a mano y sale sin cambiar nada
+      [--confirmar]                       (con --confirmar la aplica a la base)
 
 Opciones globales: --json (salida cruda)
 `;
@@ -62,6 +68,9 @@ const { values: opts, positionals } = parseArgs({
     todas: { type: 'boolean' },
     days: { type: 'string' },
     local: { type: 'boolean' },
+    archivo: { type: 'string', multiple: true },
+    sobrescribir: { type: 'boolean' },
+    confirmar: { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
   },
 });
@@ -120,6 +129,178 @@ async function watch(id: string) {
     out(`${fmtDateTime(data.createdAt).slice(11)} ${icon} ${data.stepKey ? `[${data.stepKey}] ` : ''}${data.message}`);
     return false;
   });
+}
+
+// ---------- Archivos de catalog/ ----------
+
+const FILE_STATE: Record<string, string> = {
+  IN_SYNC: 'Al día',
+  MISSING_FILE: 'Falta el archivo',
+  STALE_FILE: 'Archivo desactualizado',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  CHANGED: 'Cambios sin importar',
+  NEW: 'Nuevo',
+  INVALID: 'Inválido',
+  INACTIVE: 'Inactivo',
+  EXPORTED: 'Exportado',
+  REMOVED: 'Borrado',
+  IMPORTED: 'Importado',
+  APPLIED: 'Aplicado',
+};
+const KIND_NAME: Record<string, string> = { agent: 'Agente', skill: 'Skill', orchestrator: 'Orquestador' };
+const SUBJECT_NAME: Record<string, string> = { global: 'Global', policies: 'Políticas', connections: 'Conexiones', providers: 'Proveedores', project: 'Proyecto' };
+
+type FileBlock = any[] | { error: string };
+const blockError = (b: FileBlock) => (Array.isArray(b) ? null : b.error);
+const stateName = (s: string, config: boolean) => (config && s === 'CHANGED' ? 'Cambios sin aplicar' : (FILE_STATE[s] ?? s));
+const reportText = (r: any) => [r.message, ...(r.errors ?? [])].filter(Boolean).join(' · ').replace(/\s+/g, ' ');
+
+/** Tabla de archivos; `onlyChanges` oculta los que están al día (salida de sync/export/apply). */
+function printFileBlock(title: string, block: FileBlock, config: boolean, onlyChanges = false) {
+  const err = blockError(block);
+  if (err) return out(`${title}: no disponible — ${err}`);
+  const rows = block as any[];
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.state, (counts.get(r.state) ?? 0) + 1);
+  out(`${title}: ${rows.length ? [...counts].map(([s, n]) => `${stateName(s, config)}: ${n}`).join(' · ') : 'sin archivos'}`);
+  const shown = onlyChanges ? rows.filter((r) => r.state !== 'IN_SYNC') : rows;
+  if (!shown.length) return;
+  out('');
+  if (config) {
+    table(
+      shown.map((r) => ({ what: `${SUBJECT_NAME[r.subject] ?? r.subject}${r.key ? ` ${r.key}` : ''}`, relPath: r.relPath, state: stateName(r.state, true), msg: reportText(r) })),
+      [
+        ['what', 'Tipo', 16],
+        ['relPath', 'Archivo', 30],
+        ['state', 'Estado', 22],
+        ['msg', 'Mensaje', 70],
+      ],
+    );
+  } else {
+    table(
+      shown.map((r) => ({
+        kind: KIND_NAME[r.kind] ?? r.kind,
+        key: r.key,
+        relPath: r.relPath,
+        state: stateName(r.state, false),
+        ver: [r.version ? `v${r.version}` : '', r.approvalNumber ? approvalLabel(r.approvalNumber) : ''].filter(Boolean).join(' · ') || '—',
+        msg: reportText(r),
+      })),
+      [
+        ['kind', 'Tipo', 11],
+        ['key', 'Clave', 30],
+        ['relPath', 'Archivo', 50],
+        ['state', 'Estado', 23],
+        ['ver', 'Versión/AP', 12],
+        ['msg', 'Mensaje', 60],
+      ],
+    );
+  }
+  // Los errores completos (la tabla los recorta).
+  for (const r of shown.filter((x) => x.errors?.length)) {
+    out(`\nErrores en ${r.relPath}:`);
+    for (const e of r.errors) out(`  - ${e}`);
+  }
+}
+
+/** Diff base → archivo con dos líneas de contexto alrededor de cada cambio. */
+function printDiff(lines: { type: 'same' | 'add' | 'del'; text: string }[] | undefined) {
+  if (!lines) return out('    (sin diff disponible)');
+  if (!lines.some((l) => l.type !== 'same')) return out('    (sin diferencias de contenido)');
+  const keep = new Set<number>();
+  lines.forEach((l, i) => {
+    if (l.type !== 'same') for (let j = i - 2; j <= i + 2; j++) keep.add(j);
+  });
+  let last = -1;
+  lines.forEach((l, i) => {
+    if (!keep.has(i)) return;
+    if (last >= 0 && i > last + 1) out('    …');
+    out(`    ${l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' '} ${l.text}`);
+    last = i;
+  });
+}
+
+async function files(sub: string | undefined) {
+  if (!sub || sub === 'status') {
+    const r = await api.get('/api/catalog/files');
+    if (opts.json) return json(r);
+    out(`Carpeta: ${r.dir} (fuente de verdad versionada; los cambios en los archivos nunca se activan solos)\n`);
+    printFileBlock('Catálogo', r.catalog, false);
+    out('');
+    printFileBlock('Configuración', r.config, true);
+    const cat = Array.isArray(r.catalog) ? r.catalog : [];
+    const cfg = Array.isArray(r.config) ? r.config : [];
+    const hints: string[] = [];
+    if (cat.some((x: any) => ['CHANGED', 'NEW'].includes(x.state))) hints.push('Importar los cambios de definiciones como versiones pendientes de aprobación: pnpm mao files sync');
+    if (cat.some((x: any) => ['MISSING_FILE', 'STALE_FILE'].includes(x.state)) || cfg.some((x: any) => ['MISSING_FILE', 'STALE_FILE'].includes(x.state))) hints.push('Escribir los archivos que faltan o están desactualizados: pnpm mao files export');
+    if (cfg.some((x: any) => x.state === 'CHANGED')) hints.push('Revisar y aplicar la configuración editada a mano: pnpm mao files apply');
+    if (hints.length) out(`\n${hints.join('\n')}`);
+    return;
+  }
+  if (sub === 'sync' || sub === 'export') {
+    const overwrite = sub === 'export' && !!opts.sobrescribir;
+    if (opts.sobrescribir && sub !== 'export') throw new Error('--sobrescribir solo se usa con files export');
+    if (overwrite && !opts.confirmar) {
+      // Vista previa: qué archivos con cambios sin importar o sin aplicar se reemplazarían por lo que tiene la base.
+      const r = await api.get('/api/catalog/files');
+      const lost = [
+        // Las definiciones NEW (la base no las conoce) se conservan; las CHANGED e INVALID se reemplazan.
+        ...(Array.isArray(r.catalog) ? r.catalog.filter((x: any) => ['CHANGED', 'INVALID'].includes(x.state)) : []),
+        ...(Array.isArray(r.config) ? r.config.filter((x: any) => ['CHANGED', 'INVALID'].includes(x.state)) : []),
+      ];
+      out('--sobrescribir reemplaza los archivos con cambios sin importar (o sin aplicar) por lo que tiene la base. Las definiciones nuevas que la base no conoce se conservan; los archivos de proyectos que no existen en la base se borran. Esos cambios se pierden.');
+      if (lost.length) {
+        out(`\nSe reemplazarían o borrarían ${lost.length} archivo(s) en ${r.dir}:`);
+        for (const x of lost) out(`  ${x.relPath}  (${stateName(x.state, !x.kind)})`);
+      } else out('\nHoy no hay archivos con cambios sin importar: el resultado sería igual a pnpm mao files export.');
+      out('\nNo se cambió nada. Para hacerlo: pnpm mao files export --sobrescribir --confirmar');
+      return;
+    }
+    const r = await api.post('/api/catalog/files/sync', { mode: sub, ...(overwrite ? { overwrite: true } : {}) });
+    if (opts.json) return json(r);
+    printFileBlock('Catálogo', r.catalog, false, true);
+    out('');
+    printFileBlock('Configuración', r.config, true, true);
+    const imported = (r.catalog as any[]).filter((x) => x.state === 'IMPORTED' && x.approvalNumber);
+    if (imported.length) out(`\nLos cambios importados no se activan solos. Revisalos y aprobalos: ${imported.map((x) => `pnpm mao approval ${x.approvalNumber}`).join(' · ')}`);
+    if (Array.isArray(r.config) && r.config.some((x: any) => x.state === 'CHANGED')) out('La configuración editada a mano no se aplica sola: pnpm mao files apply');
+    return;
+  }
+  if (sub === 'apply') {
+    const status = await api.get('/api/catalog/files');
+    const err = blockError(status.config);
+    if (err) throw new Error(`No se pudo leer el estado de la configuración: ${err}`);
+    // Acepta rutas relativas a la carpeta del catálogo o a la raíz del repo, con "/" o "\".
+    const prefix = `${status.dir}/`;
+    const wanted = ((opts.archivo as string[] | undefined) ?? []).map((f) => {
+      const p = f.replace(/\\/g, '/').replace(/^\.\//, '');
+      return p.startsWith(prefix) ? p.slice(prefix.length) : p;
+    });
+    const config = status.config as any[];
+    for (const w of wanted) {
+      const found = config.find((x) => x.relPath === w);
+      if (!found) throw new Error(`${w} no es un archivo de configuración del catálogo (pnpm mao files)`);
+      if (found.state !== 'CHANGED') out(`Aviso: ${w} no tiene cambios sin aplicar (estado: ${stateName(found.state, true)}).`);
+    }
+    const targets = config.filter((x) => x.state === 'CHANGED' && (!wanted.length || wanted.includes(x.relPath)));
+    if (!targets.length) return out('No hay archivos de configuración con cambios sin aplicar.');
+    if (!opts.confirmar) {
+      if (opts.json) return json(targets);
+      out(`Se aplicaría a la base (− base, + archivo):`);
+      for (const t of targets) {
+        out(`\n${t.relPath}${t.message ? ` — ${t.message}` : ''}`);
+        printDiff(t.diff);
+      }
+      const args = wanted.length ? targets.map((t) => ` --archivo ${t.relPath}`).join('') : '';
+      out(`\nNo se cambió nada. Para aplicarlo: pnpm mao files apply${args} --confirmar`);
+      return;
+    }
+    const res = await api.post('/api/catalog/files/apply', { files: targets.map((t) => t.relPath), confirm: true });
+    if (opts.json) return json(res);
+    printFileBlock('Configuración', res, true, true);
+    return;
+  }
+  throw new Error(`Subcomando desconocido: files ${sub} (status, sync, export o apply)`);
 }
 
 function parseInputs(): Record<string, string> {
@@ -418,6 +599,8 @@ ${story ? 'Validar una HU' : 'Analizar una épica completa'}: pnpm mao run ${orc
       out(`\n${note}`);
       return;
     }
+    case 'files':
+      return files(arg);
     default:
       out(`Comando desconocido: ${cmd}\n`);
       out(HELP);

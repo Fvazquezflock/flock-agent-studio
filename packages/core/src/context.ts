@@ -21,6 +21,8 @@ export interface CoreDeps {
   prisma: PrismaClient;
   ownerName: string;
   repoRoot: string;
+  /** Carpeta de archivos del catálogo y la configuración (fuente de verdad versionada). Por defecto `<repo>/catalog`. */
+  catalogDir: string;
   /** Habilitación global de escrituras reales en Jira (además de conexión y política). */
   allowJiraWrites: boolean;
   /** Fábricas reemplazables en pruebas. */
@@ -35,10 +37,12 @@ export function defaultRepoRoot(): string {
 
 export function defaultDeps(overrides: Partial<CoreDeps> = {}): CoreDeps {
   loadRootEnv();
+  const repoRoot = overrides.repoRoot ?? defaultRepoRoot();
   return {
     prisma: overrides.prisma ?? getPrisma(),
     ownerName: overrides.ownerName ?? (process.env.MAO_OWNER_NAME || 'Propietario local'),
-    repoRoot: overrides.repoRoot ?? defaultRepoRoot(),
+    repoRoot,
+    catalogDir: overrides.catalogDir ?? path.resolve(repoRoot, process.env.MAO_CATALOG_DIR || 'catalog'),
     allowJiraWrites: overrides.allowJiraWrites ?? process.env.MAO_ALLOW_JIRA_WRITES === 'true',
     gatewayFactory: overrides.gatewayFactory,
     providerFactory: overrides.providerFactory,

@@ -1,6 +1,7 @@
 import { loadRootEnv, disconnectPrisma } from '@mao/db';
 import { Core } from '@mao/core';
 import { buildApp } from './app';
+import { syncCatalogFilesOnStartup } from './routes/catalog-files';
 
 loadRootEnv();
 const host = process.env.MAO_API_HOST || '127.0.0.1';
@@ -28,5 +29,7 @@ const shutdown = async () => {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
+// Archivos de catalog/: importa como pendientes de aprobación lo que cambió y avisa qué falta aplicar (nunca impide arrancar).
+await syncCatalogFilesOnStartup(core);
 await app.listen({ host, port });
 console.log(`API escuchando en http://${host}:${port} (solo loopback)`);

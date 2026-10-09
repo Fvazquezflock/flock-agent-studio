@@ -14,7 +14,15 @@ powershell -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 [-Ref ec54351] [-
 - **Verificado**: instalación nueva en una carpeta temporal → 63 herramientas, igual que la instalación existente.
 - **Después**: completar el `.env`, iniciar la plataforma y correr `pnpm mao doctor --mcp` (CONNECTED, 63 herramientas). El diagnóstico actualiza el estado de la conexión `jira-mcp` aunque el seed la haya registrado como no configurada (por haber corrido antes de instalar el servidor).
 
-La conexión `jira-mcp` que registra el seed ejecuta `MCP/mcp-atlassian/.venv/Scripts/mcp-atlassian.exe --env-file MCP/mcp-atlassian/.env` (rutas relativas a la raíz del repo; se cambian con `MAO_JIRA_MCP_COMMAND` y `MAO_JIRA_MCP_ARGS` antes del seed).
+La conexión `jira-mcp` que registra el seed ejecuta `MCP/mcp-atlassian/.venv/Scripts/mcp-atlassian.exe --env-file MCP/mcp-atlassian/.env` (rutas relativas a la raíz del repo). El comando se cambia con `MAO_JIRA_MCP_COMMAND` antes del seed. Como `catalog/connections.yaml` ya define `jira-mcp`, el seed la crea desde ese archivo (con su `envFile`); `MAO_JIRA_MCP_ARGS` solo se usa si el archivo no la define.
+
+## Conexiones en `catalog/connections.yaml` (2026-10-09) — Implementado
+
+Las conexiones se versionan con git en `catalog/connections.yaml`, **sin credenciales**: por cada una, `key`, `name`, `kind` (`MCP_STDIO`), `purpose` (`JIRA`) y `envFile` (la ruta del archivo de credenciales, dentro de `MCP/`, que no se versiona). Nunca van `writeEnabled`, estado, capacidades, errores ni el comando: el ejecutable se resuelve en cada máquina (`MAO_JIRA_MCP_COMMAND`).
+
+- **Base → archivo**: crear o editar una conexión (UI, `POST/PATCH /api/connections`) reescribe el archivo. Habilitar la escritura no lo cambia.
+- **Archivo → base**: un cambio manual o traído con `git pull` queda *Cambios sin aplicar* y solo se aplica con acción explícita (`pnpm mao files apply --confirmar` o *Configuración → Archivos → Aplicar*). Se pueden crear conexiones `MCP_STDIO` para `JIRA` y cambiar nombre o `envFile` (con la misma validación, `normalizeEnvFile`); no se puede cambiar el tipo ni el propósito. Aplicar **nunca habilita la escritura** (las conexiones nuevas arrancan deshabilitadas) ni borra conexiones que falten en el archivo.
+- **Instalación nueva**: `pnpm db:seed` crea las conexiones del archivo que falten en la base. En otra PC alcanza con crear los archivos de credenciales (`scripts/setup-mcp.ps1 -EnvFile <ruta>`) y diagnosticar.
 
 ## Varias conexiones Jira (2026-10-09) — Implementado
 

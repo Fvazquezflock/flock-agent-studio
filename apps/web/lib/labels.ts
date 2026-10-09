@@ -67,3 +67,40 @@ export const KIND_LABEL: Record<string, { singular: string; plural: string; path
   skill: { singular: 'Skill', plural: 'Skills', path: 'skills' },
   orchestrator: { singular: 'Orquestador', plural: 'Orquestadores', path: 'orchestrators' },
 };
+
+/** Ruta del archivo de una definición, relativa a la carpeta del catálogo. */
+export function catalogFilePath(kind: string, key: string): string {
+  if (kind === 'agent') return `agents/${key}.md`;
+  if (kind === 'skill') return `skills/${key}/SKILL.md`;
+  return `orchestrators/${key}.yaml`;
+}
+
+/** Estado de un archivo de catalog/ frente a la base (y resultado de sincronizar, exportar o aplicar). */
+const FILE_STATE: Record<string, { label: string; tone: Tone }> = {
+  IN_SYNC: { label: 'Al día', tone: 'success' },
+  MISSING_FILE: { label: 'Falta el archivo', tone: 'info' },
+  STALE_FILE: { label: 'Archivo desactualizado', tone: 'info' },
+  PENDING_APPROVAL: { label: 'Pendiente de aprobación', tone: 'warning' },
+  CHANGED: { label: 'Cambios sin importar', tone: 'warning' },
+  NEW: { label: 'Nuevo', tone: 'info' },
+  INVALID: { label: 'Inválido', tone: 'danger' },
+  INACTIVE: { label: 'Inactivo', tone: 'neutral' },
+  EXPORTED: { label: 'Exportado', tone: 'success' },
+  REMOVED: { label: 'Borrado', tone: 'neutral' },
+  IMPORTED: { label: 'Importado', tone: 'info' },
+  APPLIED: { label: 'Aplicado', tone: 'success' },
+};
+
+/** En definiciones un cambio se importa (queda pendiente de aprobación); en configuración se aplica explícitamente. */
+export function fileStateInfo(state: string, scope: 'catalog' | 'config'): { label: string; tone: Tone } {
+  if (scope === 'config' && state === 'CHANGED') return { label: 'Cambios sin aplicar', tone: 'warning' };
+  return FILE_STATE[state] ?? { label: state, tone: 'neutral' };
+}
+
+export const CONFIG_SUBJECT_LABEL: Record<string, string> = {
+  global: 'Configuración global',
+  policies: 'Políticas de aprobación',
+  connections: 'Conexiones',
+  providers: 'Proveedores de IA',
+  project: 'Proyecto',
+};

@@ -55,6 +55,7 @@ export class ConnectionService {
       data: { key: input.key, name: input.name, kind: 'MCP_STDIO', purpose: 'JIRA', config: this.stdioConfig(envFile) as object, writeEnabled: false, ...this.fileState(envFile) },
     });
     await this.core.audit.record({ actor, action: 'CONNECTION_CREATED', entityType: 'Connection', entityId: c.key, summary: `Conexión ${c.key} creada (credenciales en ${envFile}, escritura deshabilitada)` });
+    await this.core.configFiles.exportAfterChange(actor);
     return c;
   }
 
@@ -69,6 +70,7 @@ export class ConnectionService {
     }
     const c = await this.prisma.connection.update({ where: { key }, data });
     await this.core.audit.record({ actor, action: 'CONNECTION_UPDATED', entityType: 'Connection', entityId: key, summary: `Conexión ${key} actualizada${input.envFile ? ` (credenciales en ${normalizeEnvFile(input.envFile)})` : ''}` });
+    await this.core.configFiles.exportAfterChange(actor);
     return c;
   }
 

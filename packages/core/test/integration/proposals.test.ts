@@ -18,6 +18,8 @@ afterAll(async () => {
   }
   await prisma.skill.updateMany({ where: { key: { in: CREATED_SKILLS } }, data: { activeVersionId: null } });
   await prisma.skill.deleteMany({ where: { key: { in: CREATED_SKILLS } } });
+  // Y sus archivos (el hook de aprobaciones los escribió al activarlas en el catálogo de prueba).
+  for (const key of CREATED_SKILLS) core.catalogFiles.remove('skill', key);
   await core.close();
   await disconnectPrisma();
 });

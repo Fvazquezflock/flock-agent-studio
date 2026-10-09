@@ -1,0 +1,2 @@
+# Archivos del catálogo: siempre LF (el hash normaliza igual, pero evita diferencias de fin de línea en git)
+catalog/** text eol=lf

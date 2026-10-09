@@ -1,6 +1,6 @@
 # Orquestadores
 
-Definiciones declarativas versionadas (`OrchestratorDefinition`): nombre, objetivo, condiciones de uso, palabras clave (descubrimiento del supervisor), esquema de entrada, etapas con dependencias, agentes, skills, parámetros, condición `runIf`, reintentos, manejo de errores, condiciones de aprobación y esquema de resultado. Se validan como DAG (sin ciclos, dependencias existentes, publicación solo detrás de una aprobación, agentes que declaren la tarea).
+Cada orquestador es un archivo YAML versionado con git, `catalog/orchestrators/<CLAVE>.yaml` (fuente de verdad: `EPIC_TO_STORIES_AND_TASKS.yaml` y `STORY_REVIEW_AND_DECOMPOSITION.yaml`), con copia de cada versión en la base (las ejecuciones fijan la versión). Definiciones declarativas versionadas (`OrchestratorDefinition`): nombre, objetivo, condiciones de uso, palabras clave (descubrimiento del supervisor), esquema de entrada, etapas con dependencias, agentes, skills, parámetros, condición `runIf`, reintentos, manejo de errores, condiciones de aprobación y esquema de resultado. Se validan como DAG (sin ciclos, dependencias existentes, publicación solo detrás de una aprobación, agentes que declaren la tarea).
 
 Tipos de etapa (vocabulario ejecutable): `jira.context`, `agent.task`, `supervisor.review`, `approval.gate`, `jira.publish`. Las etapas cuyas dependencias están completas corren en paralelo (si `parallelSafe`).
 
@@ -43,4 +43,6 @@ context → review_story → improvements → [tasks_backend | tasks_frontend | 
 
 ## Crear orquestadores
 
-UI → *Orquestadores → Nuevo* (borrador) → editor por formulario con diagrama → *Validar* → *Solicitar activación* → aprobar. Nada se ejecuta hasta que la versión está activa.
+UI → *Orquestadores → Nuevo* (borrador) → editor por formulario con diagrama → *Validar* → *Solicitar activación* → aprobar. Nada se ejecuta hasta que la versión está activa. Al aprobar la activación, la plataforma escribe `catalog/orchestrators/<CLAVE>.yaml`.
+
+**Desde el archivo** (2026-10-09, implementado): editar `catalog/orchestrators/<CLAVE>.yaml`, o crear uno con una clave nueva (el nombre del archivo es la clave), y sincronizar (arranque de la API, `pnpm mao files sync` o *Configuración → Archivos → Sincronizar*). Se valida igual que desde la UI (DAG, dependencias, agentes que declaran la tarea, skills existentes) y se importa como versión nueva **pendiente de aprobación** con su solicitud de activación (`ACTIVATE_ORCHESTRATOR`: aprobación individual obligatoria por el piso de seguridad); nunca se activa solo. Un archivo inválido queda *Inválido* y no se importa; si se rechaza la activación, el archivo vuelve a la versión activa. Borrar el archivo no desactiva el orquestador (se vuelve a escribir desde la base); desactivarlo desde la UI borra el archivo.

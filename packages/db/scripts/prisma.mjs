@@ -10,7 +10,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
 const repoRoot = path.resolve(pkgRoot, '..', '..');
 const envFile = path.join(repoRoot, '.env');
-if (existsSync(envFile)) process.loadEnvFile(envFile);
+if (existsSync(envFile)) {
+  // Las variables ya definidas en el proceso tienen prioridad sobre el .env.
+  const before = { ...process.env };
+  process.loadEnvFile(envFile);
+  Object.assign(process.env, before);
+}
 if (process.env.MAO_USE_TEST_DB === '1' && process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 }

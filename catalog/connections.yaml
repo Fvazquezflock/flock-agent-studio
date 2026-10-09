@@ -1,0 +1,9 @@
+# Conexiones MCP. Las credenciales viven en el archivo envFile (dentro de MCP/, no se versiona).
+# La plataforma exporta este archivo desde la base en cada cambio (sin secretos).
+# Los cambios manuales o traídos con git pull no se aplican solos: aplicalos con `pnpm mao files apply` o desde la UI (página Archivos).
+connections:
+  - key: jira-mcp
+    name: Jira (mcp-atlassian, stdio)
+    kind: MCP_STDIO
+    purpose: JIRA
+    envFile: MCP/mcp-atlassian/.env

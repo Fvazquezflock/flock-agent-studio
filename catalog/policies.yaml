@@ -1,0 +1,64 @@
+# Políticas de aprobación activas (sin las de proyectos en modo DEMO).
+# La plataforma exporta este archivo desde la base en cada cambio (sin secretos).
+# Los cambios manuales o traídos con git pull no se aplican solos: aplicalos con `pnpm mao files apply` o desde la UI (página Archivos).
+policies:
+  - scope: GLOBAL
+    operation: READ_EXTERNAL
+    mode: AUTO_APPROVED
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: GENERATE_PROPOSAL
+    mode: AUTO_APPROVED
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: CREATE_ISSUE
+    mode: BATCH_APPROVAL
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: UPDATE_ISSUE
+    mode: ALWAYS_APPROVE
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: CREATE_ISSUE_LINK
+    mode: BATCH_APPROVAL
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: TRANSITION_ISSUE
+    mode: ALWAYS_APPROVE
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: MODIFY_AGENT_CONFIG
+    mode: ALWAYS_APPROVE
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: ACTIVATE_AGENT
+    mode: ALWAYS_APPROVE
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: ACTIVATE_SKILL
+    mode: ALWAYS_APPROVE
+    mandatory: true
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: ACTIVATE_ORCHESTRATOR
+    mode: ALWAYS_APPROVE
+    mandatory: true
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: APPLY_CAPABILITY_PROPOSAL
+    mode: ALWAYS_APPROVE
+    mandatory: false
+    description: Política por defecto de la plataforma
+  - scope: GLOBAL
+    operation: DELETE_EXTERNAL
+    mode: DENIED
+    mandatory: true
+    description: Política por defecto de la plataforma

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { PlatformError, sanitize, toPlatformError, type Core } from '@mao/core';
 import { registerApprovalRoutes } from './routes/approvals';
 import { registerCatalogRoutes } from './routes/catalog';
+import { registerCatalogFileRoutes } from './routes/catalog-files';
 import { registerExecutionRoutes } from './routes/executions';
 import { registerGovernanceRoutes } from './routes/governance';
 import { registerIntegrationRoutes } from './routes/integrations';
@@ -61,6 +62,7 @@ export async function buildApp(core: Core, opts: AppOptions): Promise<FastifyIns
   registerSystemRoutes(app, core);
   registerProjectRoutes(app, core);
   registerCatalogRoutes(app, core);
+  registerCatalogFileRoutes(app, core);
   registerExecutionRoutes(app, core);
   registerApprovalRoutes(app, core);
   registerGovernanceRoutes(app, core);
