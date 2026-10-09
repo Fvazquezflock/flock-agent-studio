@@ -1,0 +1,22 @@
+{
+  "name": "@mao/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "seed": "node --import tsx src/seed/run.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.128.0",
+    "@mao/db": "workspace:*",
+    "@mao/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.6.5"
+  }
+}

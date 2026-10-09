@@ -1,0 +1,53 @@
+<!-- @dsCard group="Plantillas" height=760 page -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>TemplateList — preview</title></head>
+<body>
+<div id="root" class="fk-preview fk-preview--flush"></div>
+<script>
+const { html, AppFooter, AppShell, Button, Combobox, DataTable, DatePicker, FilterGrid, FormField, Header, IconButton, PageHeader, Pagination, SavedViews, Select, Sidebar, StatusBadge, TableToolbar, TextInput } = window.FlockUI;
+const LOGO = '/_blob/13e7d851edc10670fc844d40a8656fa1';
+const USER = { name: 'Ana Torres', role: 'Team Manager', email: 'ana.torres@flockit.com.ar' };
+const NAV = [
+  { label: 'Inicio', icon: 'home' },
+  { type: 'section', label: 'Gestión' },
+  { label: 'Facturación', icon: 'receipt', count: 12 },
+  { label: 'Partners', icon: 'building' },
+  { label: 'Contratos', icon: 'file' },
+  { type: 'section', label: 'Reportes' },
+  { label: 'Tableros', icon: 'bar-chart' },
+];
+
+const ROWS = [
+  { id: 'FP-1042', partner: 'Andes Software', cuit: '30-71234567-8', horas: 1248, monto: 15600000, estado: 'Aprobado', resp: 'Martín López' },
+  { id: 'FP-1043', partner: 'Nodo Labs', cuit: '30-70987654-3', horas: 932, monto: 11650000, estado: 'En revisión', resp: 'Ana Torres' },
+  { id: 'FP-1044', partner: 'Pampa Dev', cuit: '30-71555222-1', horas: 610, monto: 7625000, estado: 'Pendiente', resp: 'Julia Méndez' },
+  { id: 'FP-1045', partner: 'Río Sistemas', cuit: '30-70111999-4', horas: 418, monto: 5225000, estado: 'Rechazado', resp: 'Diego Sosa' },
+];
+const TONE = { 'Aprobado': 'success', 'En revisión': 'info', 'Pendiente': 'warning', 'Rechazado': 'danger' };
+function Demo() {
+  NAV[2].active = true;
+  return html`<div style=${{ height: 760 }}><${AppShell} fixed style=${{ height: '100%' }}
+    header=${html`<${Header} logoSrc=${LOGO} product="Gestión" env="test" notifications=${3} user=${USER} />`}
+    sidebar=${html`<${Sidebar} items=${NAV} />`} footer=${html`<${AppFooter} product="Gestión" version="2.4.1" />`}>
+    <${PageHeader} title="Facturación de partners" breadcrumbs=${[{ label: 'Inicio' }, { label: 'Facturación' }]}
+      actions=${html`<${Button} variant="secondary" icon="download">Exportar<//><${Button} icon="plus">Nuevo período<//>`} />
+    <div style=${{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <${SavedViews} defaultValue="pend" views=${[{ id: 'all', label: 'Todos', count: 248 }, { id: 'pend', label: 'Pendientes', count: 12, default: true }, { id: 'mine', label: 'Mis partners', count: 3 }]} onSave=${() => {}} />
+      <${FilterGrid} activeCount=${2} more=${html`<${FormField} label="Responsable"><${Select} options=${['Ana Torres', 'Martín López']} placeholder="Todos" /><//>`}>
+        <${FormField} label="Partner"><${Combobox} options=${ROWS.map((r) => r.partner)} placeholder="Buscá un partner" /><//>
+        <${FormField} label="Estado"><${Select} options=${['Pendiente', 'En revisión', 'Aprobado', 'Rechazado']} defaultValue="Pendiente" /><//>
+        <${FormField} label="Período"><${DatePicker} range defaultValue=${{ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) }} /><//>
+        <${FormField} label="Código"><${TextInput} placeholder="FP-0000" /><//>
+      <//>
+      <${DataTable} rows=${ROWS} selectable rowActions=${() => [{ label: 'Ver detalle', icon: 'eye' }, { label: 'Editar', icon: 'edit' }, { type: 'separator' }, { label: 'Anular', icon: 'trash', danger: true }]}
+        columns=${[{ key: 'partner', header: 'Partner', sub: 'cuit', sortable: true }, { key: 'id', header: 'Código', render: (r) => html`<span className="fk-mono">${r.id}</span>` }, { key: 'horas', header: 'Horas', align: 'right', render: (r) => r.horas.toLocaleString('es-AR') }, { key: 'monto', header: 'Monto', align: 'right', sortable: true, render: (r) => '$ ' + r.monto.toLocaleString('es-AR', { minimumFractionDigits: 2 }) }, { key: 'estado', header: 'Estado', render: (r) => html`<${StatusBadge} tone=${TONE[r.estado]}>${r.estado}<//>` }, { key: 'resp', header: 'Responsable' }]}
+        toolbar=${html`<${TableToolbar} title="Resultados" count=${12} actions=${html`<${IconButton} icon="columns" label="Columnas" size="sm" variant="secondary" />`} />`}
+        footer=${html`<${Pagination} total=${12} compact />`} />
+    </div>
+  <//></div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${Demo} />`);
+</script>
+</body>
+</html>

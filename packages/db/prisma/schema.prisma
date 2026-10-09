@@ -1,0 +1,677 @@
+// Multi-Agent Orchestration Studio — modelo de datos (PostgreSQL).
+// Convenciones: ids cuid, fechas UTC, definiciones versionadas e inmutables (JSON) + checksum.
+// Nunca se guardan secretos: las conexiones solo referencian nombres de variables o archivos.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum VersionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  INACTIVE
+  REJECTED
+  ARCHIVED
+}
+
+enum EntityStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum ProjectMode {
+  DEMO
+  JIRA
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  WAITING_APPROVAL
+  RETRYING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  WAITING_APPROVAL
+  RETRYING
+  COMPLETED
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+enum ExecutionSource {
+  UI
+  CLI
+  CLAUDE_CODE
+  API
+}
+
+enum ApprovalMode {
+  ALWAYS_APPROVE
+  BATCH_APPROVAL
+  AUTO_APPROVED
+  DENIED
+}
+
+enum PolicyScope {
+  GLOBAL
+  PROJECT
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  PARTIALLY_DECIDED
+  DECIDED
+  SUPERSEDED
+  CANCELLED
+}
+
+enum ApprovalItemStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DENIED_BY_POLICY
+  AUTO_APPROVED
+  CONFLICT
+}
+
+enum ExternalOperationStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCEEDED
+  SIMULATED
+  FAILED
+  UNCERTAIN
+  BLOCKED
+  SKIPPED
+}
+
+enum ProposalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum ProposalKind {
+  AGENT
+  SKILL
+  ORCHESTRATOR
+  MODIFICATION
+}
+
+enum ProviderKind {
+  MOCK
+  LOCAL_CLAUDE
+  ANTHROPIC_API
+}
+
+enum ConnectionKind {
+  MCP_STDIO
+  MCP_HTTP
+}
+
+enum ActorType {
+  USER
+  AGENT
+  SYSTEM
+  WORKER
+}
+
+// ---------- Proyectos y configuración ----------
+
+model Project {
+  id                   String                 @id @default(cuid())
+  key                  String                 @unique
+  name                 String
+  description          String                 @default("")
+  jiraProjectKey       String
+  mode                 ProjectMode            @default(DEMO)
+  status               EntityStatus           @default(ACTIVE)
+  connectionId         String?
+  connection           Connection?            @relation(fields: [connectionId], references: [id])
+  defaultProviderId    String?
+  defaultProvider      ModelProviderConfiguration? @relation(fields: [defaultProviderId], references: [id])
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  configurations       ProjectConfiguration[]
+  executions           Execution[]
+  policies             ApprovalPolicy[]
+  approvalRequests     ApprovalRequest[]
+}
+
+model ProjectConfiguration {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version   Int
+  status    VersionStatus @default(ACTIVE)
+  config    Json
+  checksum  String
+  changeNote String       @default("")
+  createdBy String
+  createdAt DateTime      @default(now())
+  executions Execution[]
+
+  @@unique([projectId, version])
+  @@index([projectId, status])
+}
+
+model GlobalSetting {
+  key       String   @id
+  value     Json
+  version   Int      @default(1)
+  updatedBy String
+  updatedAt DateTime @updatedAt
+}
+
+model Connection {
+  id            String         @id @default(cuid())
+  key           String         @unique
+  name          String
+  kind          ConnectionKind
+  purpose       String         @default("JIRA")
+  // Comando/args/cwd o URL. Nunca valores secretos: solo rutas a archivos de entorno o nombres de variables.
+  config        Json
+  writeEnabled  Boolean        @default(false)
+  status        String         @default("UNKNOWN")
+  lastCheckedAt DateTime?
+  // Mapa real de capacidades detectadas (tools/resources) y resultado del último diagnóstico.
+  capabilities  Json?
+  lastError     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  projects      Project[]
+}
+
+model ModelProviderConfiguration {
+  id            String       @id @default(cuid())
+  key           String       @unique
+  name          String
+  kind          ProviderKind
+  // Modelo, binario, nombre de la variable de entorno de la API key (nunca la key).
+  config        Json
+  isDefault     Boolean      @default(false)
+  enabled       Boolean      @default(true)
+  status        String       @default("UNKNOWN")
+  lastCheckedAt DateTime?
+  lastDiagnosis Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  projects      Project[]
+  executions    Execution[]
+}
+
+// ---------- Catálogo versionado: agentes, skills, orquestadores ----------
+
+model Agent {
+  id              String         @id @default(cuid())
+  key             String         @unique
+  name            String
+  description     String         @default("")
+  status          EntityStatus   @default(DRAFT)
+  activeVersionId String?        @unique
+  activeVersion   AgentVersion?  @relation("AgentActiveVersion", fields: [activeVersionId], references: [id])
+  createdBy       String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  versions        AgentVersion[] @relation("AgentVersions")
+}
+
+model AgentVersion {
+  id          String        @id @default(cuid())
+  agentId     String
+  agent       Agent         @relation("AgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
+  version     Int
+  status      VersionStatus @default(DRAFT)
+  definition  Json
+  checksum    String
+  changeNote  String        @default("")
+  sourceProposalId String?
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  approvedBy  String?
+  approvedAt  DateTime?
+  activatedAt DateTime?
+  activeFor   Agent?        @relation("AgentActiveVersion")
+
+  @@unique([agentId, version])
+  @@index([agentId, status])
+}
+
+model Skill {
+  id              String         @id @default(cuid())
+  key             String         @unique
+  name            String
+  description     String         @default("")
+  status          EntityStatus   @default(DRAFT)
+  activeVersionId String?        @unique
+  activeVersion   SkillVersion?  @relation("SkillActiveVersion", fields: [activeVersionId], references: [id])
+  createdBy       String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  versions        SkillVersion[] @relation("SkillVersions")
+}
+
+model SkillVersion {
+  id          String        @id @default(cuid())
+  skillId     String
+  skill       Skill         @relation("SkillVersions", fields: [skillId], references: [id], onDelete: Cascade)
+  version     Int
+  status      VersionStatus @default(DRAFT)
+  definition  Json
+  checksum    String
+  changeNote  String        @default("")
+  sourceProposalId String?
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  approvedBy  String?
+  approvedAt  DateTime?
+  activatedAt DateTime?
+  activeFor   Skill?        @relation("SkillActiveVersion")
+
+  @@unique([skillId, version])
+  @@index([skillId, status])
+}
+
+model Orchestrator {
+  id              String                @id @default(cuid())
+  key             String                @unique
+  name            String
+  description     String                @default("")
+  status          EntityStatus          @default(DRAFT)
+  activeVersionId String?               @unique
+  activeVersion   OrchestratorVersion?  @relation("OrchestratorActiveVersion", fields: [activeVersionId], references: [id])
+  createdBy       String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  versions        OrchestratorVersion[] @relation("OrchestratorVersions")
+}
+
+model OrchestratorVersion {
+  id             String             @id @default(cuid())
+  orchestratorId String
+  orchestrator   Orchestrator       @relation("OrchestratorVersions", fields: [orchestratorId], references: [id], onDelete: Cascade)
+  version        Int
+  status         VersionStatus      @default(DRAFT)
+  definition     Json
+  checksum       String
+  changeNote     String             @default("")
+  sourceProposalId String?
+  createdBy      String
+  createdAt      DateTime           @default(now())
+  approvedBy     String?
+  approvedAt     DateTime?
+  activatedAt    DateTime?
+  activeFor      Orchestrator?      @relation("OrchestratorActiveVersion")
+  steps          OrchestratorStep[]
+  executions     Execution[]
+
+  @@unique([orchestratorId, version])
+  @@index([orchestratorId, status])
+}
+
+// Etapas materializadas de cada versión (consultas y visualización; la definición JSON es la fuente).
+model OrchestratorStep {
+  id                    String              @id @default(cuid())
+  orchestratorVersionId String
+  orchestratorVersion   OrchestratorVersion @relation(fields: [orchestratorVersionId], references: [id], onDelete: Cascade)
+  key                   String
+  name                  String
+  handler               String
+  agentKey              String?
+  skillKeys             String[]
+  dependsOn             String[]
+  position              Int
+  config                Json
+
+  @@unique([orchestratorVersionId, key])
+}
+
+model CapabilityProposal {
+  id                String         @id @default(cuid())
+  number            Int            @unique @default(autoincrement())
+  kind              ProposalKind
+  // CREATE (capacidad nueva) | UPDATE (nueva versión de una existente) | CANCEL (dejar de usar una existente)
+  action            String         @default("CREATE")
+  // Inconsistencias o brechas concretas que motivan la propuesta (referencias verificables)
+  evidence          String[]       @default([])
+  targetKey         String
+  title             String
+  status            ProposalStatus @default(DRAFT)
+  problem           String
+  justification     String
+  solution          String
+  definition        Json
+  toolsRequested    String[]
+  permissionsRequested String[]
+  expectedImpact    String
+  risks             String[]
+  suggestedTests    String[]
+  verification      Json?
+  revision          Int            @default(1)
+  createdByType     ActorType
+  createdBy         String
+  sourceExecutionId String?
+  sourceExecution   Execution?     @relation(fields: [sourceExecutionId], references: [id])
+  decidedBy         String?
+  decidedAt         DateTime?
+  decisionComment   String?
+  appliedVersionRef Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  revisions         CapabilityProposalRevision[]
+
+  @@index([status])
+}
+
+model CapabilityProposalRevision {
+  id         String             @id @default(cuid())
+  proposalId String
+  proposal   CapabilityProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  revision   Int
+  snapshot   Json
+  editedBy   String
+  createdAt  DateTime           @default(now())
+
+  @@unique([proposalId, revision])
+}
+
+// ---------- Ejecuciones ----------
+
+model Execution {
+  id                    String               @id @default(cuid())
+  number                Int                  @unique @default(autoincrement())
+  source                ExecutionSource
+  status                ExecutionStatus      @default(PENDING)
+  projectId             String
+  project               Project              @relation(fields: [projectId], references: [id])
+  orchestratorVersionId String
+  orchestratorVersion   OrchestratorVersion  @relation(fields: [orchestratorVersionId], references: [id])
+  projectConfigurationId String
+  projectConfiguration  ProjectConfiguration @relation(fields: [projectConfigurationId], references: [id])
+  providerId            String
+  provider              ModelProviderConfiguration @relation(fields: [providerId], references: [id])
+  input                 Json
+  // Versiones exactas de agentes/skills/config/políticas usadas (inmutable tras la creación).
+  snapshot              Json
+  // { model: "MOCK"|"REAL", jira: "DEMO"|"LIVE" }
+  simulation            Json
+  output                Json?
+  error                 Json?
+  currentStepKey        String?
+  requestedBy           String
+  requestText           String?
+  plan                  Json?
+  attempt               Int                  @default(0)
+  lockedBy              String?
+  lockedUntil           DateTime?
+  nextRunAt             DateTime?
+  cancelRequestedAt     DateTime?
+  createdAt             DateTime             @default(now())
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  updatedAt             DateTime             @updatedAt
+  steps                 ExecutionStep[]
+  events                ExecutionEvent[]
+  approvalRequests      ApprovalRequest[]
+  operations            ExternalOperation[]
+  issueSnapshots        IssueSnapshot[]
+  proposals             CapabilityProposal[]
+  modelInvocations      ModelInvocation[]
+
+  @@index([status, nextRunAt])
+  @@index([projectId, createdAt])
+}
+
+model ExecutionStep {
+  id             String     @id @default(cuid())
+  executionId    String
+  execution      Execution  @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  key            String
+  name           String
+  handler        String
+  agentKey       String?
+  agentVersionId String?
+  position       Int
+  dependsOn      String[]
+  status         StepStatus @default(PENDING)
+  attempt        Int        @default(0)
+  maxAttempts    Int        @default(3)
+  input          Json?
+  output         Json?
+  error          Json?
+  // Evidencias y decisiones explicables (nunca razonamiento privado del modelo).
+  decisions      Json?
+  usage          Json?
+  nextRunAt      DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([executionId, key])
+}
+
+model ExecutionEvent {
+  id          BigInt    @id @default(autoincrement())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stepKey     String?
+  type        String
+  level       String    @default("info")
+  message     String
+  data        Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([executionId, id])
+}
+
+// Consumo de modelos: una fila por invocación (también las que no cumplen el contrato, porque igual consumen).
+// origin: EXECUTION (etapa de una ejecución), SUPERVISOR_PLAN (planificar un pedido), CATALOG_TEST (probar una versión).
+model ModelInvocation {
+  id                       BigInt       @id @default(autoincrement())
+  origin                   String
+  executionId              String?
+  execution                Execution?   @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stepKey                  String?
+  attempt                  Int?
+  agentKey                 String
+  agentVersion             Int?
+  task                     String
+  provider                 ProviderKind
+  model                    String?
+  simulated                Boolean      @default(false)
+  // OK o código del error de contrato (INVALID_RESPONSE)
+  outcome                  String       @default("OK")
+  inputTokens              Int          @default(0)
+  outputTokens             Int          @default(0)
+  cacheCreationInputTokens Int          @default(0)
+  cacheReadInputTokens     Int          @default(0)
+  // Estimación informada por el proveedor (equivalente API); con suscripción no es un cargo.
+  costUsd                  Float?
+  durationMs               Int?
+  createdAt                DateTime     @default(now())
+
+  @@index([executionId])
+  @@index([agentKey, createdAt])
+  @@index([createdAt])
+}
+
+// ---------- Aprobaciones ----------
+
+model ApprovalPolicy {
+  id              String       @id @default(cuid())
+  scope           PolicyScope
+  projectId       String?
+  project         Project?     @relation(fields: [projectId], references: [id])
+  // Calificador opcional de "operación": limita la política a un orquestador.
+  orchestratorKey String?
+  operationType   String
+  mode            ApprovalMode
+  // Si es obligatoria (solo GLOBAL), los ámbitos inferiores no pueden relajarla.
+  mandatory       Boolean      @default(false)
+  rules           Json         @default("{}")
+  version         Int
+  status          EntityStatus @default(ACTIVE)
+  description     String       @default("")
+  createdBy       String
+  createdAt       DateTime     @default(now())
+
+  @@index([operationType, status])
+}
+
+model ApprovalRequest {
+  id             String                @id @default(cuid())
+  number         Int                   @unique @default(autoincrement())
+  executionId    String?
+  execution      Execution?            @relation(fields: [executionId], references: [id])
+  stepKey        String?
+  projectId      String?
+  project        Project?              @relation(fields: [projectId], references: [id])
+  kind           String
+  title          String
+  summary        String                @default("")
+  status         ApprovalRequestStatus @default(PENDING)
+  // Snapshot inmutable de la operación propuesta al crear la solicitud.
+  snapshot       Json
+  snapshotHash   String
+  // Referencia a una entidad del catálogo (activaciones de versiones).
+  subjectType    String?
+  subjectId      String?
+  supersedesId   String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  items          ApprovalItem[]
+  decisions      ApprovalDecision[]
+
+  @@index([status])
+}
+
+model ApprovalItem {
+  id            String             @id @default(cuid())
+  requestId     String
+  request       ApprovalRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  itemKey       String
+  group         String
+  operationType String
+  title         String
+  // Contenido propuesto vigente (editable antes de decidir; cada edición crea revisión).
+  payload       Json
+  payloadHash   String
+  original      Json?
+  revision      Int                @default(1)
+  history       Json               @default("[]")
+  dependsOn     String[]
+  status        ApprovalItemStatus @default(PENDING)
+  policyId      String?
+  policyMode    ApprovalMode
+  policyVersion Int?
+  decidedAt     DateTime?
+  decisionId    String?
+  approvedHash  String?
+  note          String?
+  // Qué hace el ítem en Jira (CREATE | UPDATE | CANCEL) y por qué: motivo, evidencia e inconsistencias encontradas por los agentes.
+  action        String?
+  rationale     Json?
+
+  @@unique([requestId, itemKey])
+}
+
+model ApprovalDecision {
+  id           String          @id @default(cuid())
+  requestId    String
+  request      ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  decision     String
+  approver     String
+  approverType ActorType
+  channel      String
+  comment      String          @default("")
+  // [{ itemKey, revision, payloadHash, decision, policyId, policyMode, policyVersion }]
+  items        Json
+  createdAt    DateTime        @default(now())
+}
+
+model ExternalOperation {
+  id             String                  @id @default(cuid())
+  executionId    String
+  execution      Execution               @relation(fields: [executionId], references: [id])
+  approvalItemId String?
+  kind           String
+  idempotencyKey String                  @unique
+  correlationId  String
+  mode           String
+  target         String
+  payload        Json
+  payloadHash    String
+  status         ExternalOperationStatus @default(PENDING)
+  attempts       Int                     @default(0)
+  result         Json?
+  error          Json?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([executionId])
+}
+
+model IssueSnapshot {
+  id          String    @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  issueKey    String
+  source      String
+  role        String
+  updated     String?
+  contentHash String
+  data        Json
+  fetchedAt   DateTime  @default(now())
+
+  @@unique([executionId, issueKey])
+}
+
+// ---------- Auditoría y operación ----------
+
+model AuditEvent {
+  id          BigInt    @id @default(autoincrement())
+  at          DateTime  @default(now())
+  actorType   ActorType
+  actorId     String
+  action      String
+  entityType  String
+  entityId    String
+  projectId   String?
+  executionId String?
+  summary     String
+  data        Json?
+
+  @@index([at])
+  @@index([entityType, entityId])
+  @@index([executionId])
+}
+
+model WorkerHeartbeat {
+  workerId  String   @id
+  pid       Int
+  host      String
+  startedAt DateTime
+  seenAt    DateTime
+  running   Int      @default(0)
+  info      Json?
+}

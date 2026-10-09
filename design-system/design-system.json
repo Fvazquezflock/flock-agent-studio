@@ -1,0 +1,52 @@
+{
+  "v": 3,
+  "assetGroups": {
+    "Logos": {
+      "files": {
+        "flock-logo.png": {
+          "blob": "13e7d851edc10670fc844d40a8656fa1",
+          "name": "flock-logo.png",
+          "size": 2483,
+          "type": "image/png"
+        }
+      },
+      "name": "Logos",
+      "order": [
+        "flock-logo.png"
+      ],
+      "tile": "l"
+    }
+  },
+  "blobs": {},
+  "createdOnFiles": {
+    "at": "2026-10-05T05:01:44Z",
+    "v": 1
+  },
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "groups": [
+    "Logos"
+  ],
+  "lastChange": {
+    "at": "2026-10-05T12:48:13Z",
+    "by": "Federico Vazquez",
+    "via": "Claude (Cowork)",
+    "note": "Filtros de tabla: ColumnFilter y filterMode (menú / fila) en DataTable"
+  },
+  "layout": "files",
+  "libraries": [
+    {
+      "name": "react",
+      "version": "18"
+    },
+    {
+      "name": "react-dom",
+      "version": "18"
+    }
+  ],
+  "namespace": "FlockUI",
+  "sections": {},
+  "title": "Flock IT"
+}

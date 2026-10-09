@@ -1,0 +1,56 @@
+{
+  "name": "multi-agent-orchestration-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma multiagente configurable, auditable y extensible (MVP local para Windows).",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:start": "node scripts/db-embedded.mjs start",
+    "db:stop": "node scripts/db-embedded.mjs stop",
+    "db:status": "node scripts/db-embedded.mjs status",
+    "db:migrate": "pnpm --filter @mao/db migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @mao/db migrate:dev",
+    "db:generate": "pnpm --filter @mao/db generate",
+    "db:seed": "pnpm --filter @mao/core seed",
+    "dev:api": "pnpm --filter @mao/api dev",
+    "dev:worker": "pnpm --filter @mao/worker dev",
+    "dev:web": "pnpm --filter @mao/web dev",
+    "start:api": "pnpm --filter @mao/api start",
+    "start:worker": "pnpm --filter @mao/worker start",
+    "start:web": "pnpm --filter @mao/web start",
+    "mao": "node --import tsx apps/cli/src/index.ts",
+    "doctor": "node --import tsx apps/cli/src/index.ts doctor --local",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "tokens": "node design-system/scripts/build-tokens.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "embedded-postgres": "18.4.0-beta.17",
+    "pg": "8.23.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  },
+  "optionalDependencies": {
+    "@embedded-postgres/windows-x64": "18.4.0-beta.17"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "embedded-postgres",
+      "@embedded-postgres/windows-x64",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+<!-- @dsCard group="Layout y navegación" height=560 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>AppShell — preview</title></head>
+<body>
+<div id="root" class="fk-preview fk-preview--flush"></div>
+<script>
+const { html, AppFooter, AppShell, Button, Grid, Header, PageHeader, Sidebar, StatCard } = window.FlockUI;
+const NAV = [
+  { label: 'Inicio', icon: 'home' },
+  { type: 'section', label: 'Gestión' },
+  { label: 'Facturación', icon: 'receipt', active: true, count: 12 },
+  { label: 'Partners', icon: 'building', count: 5 },
+  { label: 'Contratos', icon: 'file' },
+  { label: 'Equipos', icon: 'users', children: [{ label: 'Equipo Alfa' }, { label: 'Equipo Beta' }] },
+  { type: 'section', label: 'Reportes' },
+  { label: 'Tableros', icon: 'bar-chart' },
+  { label: 'Exportaciones', icon: 'download' },
+];
+const LOGO = '/_blob/13e7d851edc10670fc844d40a8656fa1';
+const USER = { name: 'Ana Torres', role: 'Team Manager', email: 'ana.torres@flockit.com.ar' };
+
+function Demo() {
+  return html`<${AppShell} fixed style=${{ height: 560 }}
+    header=${html`<${Header} logoSrc=${LOGO} product="Facturación" env="test" notifications=${3} user=${USER} />`}
+    sidebar=${html`<${Sidebar} items=${NAV} />`}
+    footer=${html`<${AppFooter} product="Facturación" version="2.4.1" />`}>
+    <${PageHeader} title="Facturación de partners" description="Seguimiento mensual de horas y montos por partner."
+      breadcrumbs=${[{ label: 'Inicio' }, { label: 'Facturación' }]}
+      actions=${html`<${Button} variant="secondary" icon="download">Exportar<//><${Button} icon="plus">Nuevo período<//>`} />
+    <${Grid} cols=${3}>
+      <${StatCard} label="Facturado en octubre" value="$ 48.250.000" delta=${8.4} icon="dollar" />
+      <${StatCard} label="Horas cargadas" value="6.412" delta=${-2.1} icon="clock" />
+      <${StatCard} label="Partners activos" value="5" delta=${0} deltaLabel="sin cambios" icon="building" />
+    <//>
+  <//>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${Demo} />`);
+</script>
+</body>
+</html>

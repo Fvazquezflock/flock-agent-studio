@@ -1,0 +1,18 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+# Postgres embebido (datos locales)
+.data/
+# Exportaciones generadas para Claude Code
+exports/
+# Estilos generados desde design-system/tokens.json (pnpm tokens)
+apps/web/styles/
+# Servidor MCP existente: repositorio aparte con su propio .env (secretos)
+MCP/
+.turbo/
+*.tsbuildinfo

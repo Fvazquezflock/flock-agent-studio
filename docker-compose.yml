@@ -1,0 +1,23 @@
+# PostgreSQL local para el MVP. Expuesto solo en loopback (127.0.0.1).
+# Alternativa sin Docker: `pnpm db:start` (PostgreSQL embebido, mismo puerto y credenciales).
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    container_name: mao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${MAO_DB_USER:-mao}
+      POSTGRES_PASSWORD: ${MAO_DB_PASSWORD:-mao_local_dev}
+      POSTGRES_DB: mao
+    ports:
+      - "127.0.0.1:${MAO_DB_PORT:-5433}:5432"
+    volumes:
+      - mao-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MAO_DB_USER:-mao} -d mao"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mao-pgdata:

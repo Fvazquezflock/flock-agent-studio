@@ -1,0 +1,17 @@
+{
+  "name": "@mao/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "node --watch --import tsx src/index.ts",
+    "start": "node --import tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mao/core": "workspace:*",
+    "@mao/db": "workspace:*",
+    "@mao/shared": "workspace:*"
+  }
+}

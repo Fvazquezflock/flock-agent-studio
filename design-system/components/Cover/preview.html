@@ -1,0 +1,58 @@
+<!-- @dsCard height=300 -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  .cover { position: relative; width: 960px; height: 300px; overflow: hidden; background: var(--bg); font-family: var(--font-sans); }
+  .cover svg { position: absolute; left: 0; top: 0; }
+  .text { position: absolute; left: 40px; bottom: 36px; max-width: 420px; }
+  .name { margin: 0; font-size: 88px; line-height: 0.92; font-weight: 300; letter-spacing: 0.9px; color: var(--ink); }
+  .tag { margin: 14px 0 0; font-size: 14px; line-height: 20px; letter-spacing: 0.3px; color: var(--ink-muted); }
+  .night  { fill: var(--surface-brand); }
+  .purple { fill: var(--brand-purple); }
+  .lilac  { fill: var(--brand-lilac); }
+  .orange { fill: var(--accent); }
+  .violet { fill: var(--brand-violet); }
+  .orchid { fill: var(--brand-orchid); }
+  .tile   { rx: var(--radius-lg); ry: var(--radius-lg); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <svg width="960" height="300" viewBox="0 0 960 300" aria-hidden="true">
+    <!--
+      blocks: surface-brand slab 380x252, brand-purple 184x168 (bleeds bottom), brand-lilac 96x112, accent pill 220x60 (bleeds right); tile corners = radius-lg (20px)
+      arrangement: one tall night slab bleeding right with two satellites stacked at its left edge, like the site's dark sections with lilac/purple accents
+      pattern: pills (radius-pill shape, rx = half of 20px height) in staggered rows flowing up-right, "flock" = bandada; the pill is the site's button shape
+      steps & radii: pill height 20 = space-20, row pitch 30 = space-30, gaps 10 = space-10, insets 20/40 = space-20/space-40; radius-lg 20px, pills rx 10/30
+    -->
+    <rect class="night tile" x="600" y="24" width="400" height="252"/>
+    <rect class="lilac tile" x="496" y="24" width="88" height="112"/>
+    <rect class="purple tile" x="496" y="152" width="184" height="168"/>
+    <rect class="orange" x="780" y="44" width="220" height="60" rx="30" ry="30"/>
+
+    <rect class="violet" x="640" y="224" width="60"  height="20" rx="10" ry="10"/>
+    <rect class="orchid" x="710" y="224" width="100" height="20" rx="10" ry="10"/>
+    <rect class="lilac"  x="820" y="224" width="40"  height="20" rx="10" ry="10"/>
+    <rect class="orchid" x="680" y="194" width="40"  height="20" rx="10" ry="10"/>
+    <rect class="violet" x="730" y="194" width="80"  height="20" rx="10" ry="10"/>
+    <rect class="orange" x="820" y="194" width="60"  height="20" rx="10" ry="10"/>
+    <rect class="lilac"  x="890" y="194" width="100" height="20" rx="10" ry="10"/>
+    <rect class="violet" x="720" y="164" width="100" height="20" rx="10" ry="10"/>
+    <rect class="orchid" x="830" y="164" width="40"  height="20" rx="10" ry="10"/>
+    <rect class="violet" x="880" y="164" width="60"  height="20" rx="10" ry="10"/>
+    <rect class="lilac"  x="770" y="134" width="40"  height="20" rx="10" ry="10"/>
+    <rect class="orchid" x="820" y="134" width="80"  height="20" rx="10" ry="10"/>
+    <rect class="violet" x="910" y="134" width="60"  height="20" rx="10" ry="10"/>
+    <rect class="lilac"  x="640" y="44"  width="100" height="20" rx="10" ry="10"/>
+    <rect class="orchid" x="640" y="74"  width="60"  height="20" rx="10" ry="10"/>
+  </svg>
+  <div class="text">
+    <h1 class="name">Flock IT</h1>
+    <p class="tag">Sistema de diseño para los productos internos de Flock</p>
+  </div>
+</div>
+</body>
+</html>
